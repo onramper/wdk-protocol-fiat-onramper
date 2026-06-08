@@ -1,0 +1,53 @@
+import { CHECKOUT_ERROR_CODES, OAUTH_ERROR_CODES, OnramperErrorCode } from './codes.ts';
+
+/**
+ * Thrown by base/unimplemented protocol methods. Named to match WDK's own
+ * `NotImplementedError` so WDK consumers' `instanceof`/name checks keep working.
+ */
+export class NotImplementedError extends Error {
+  constructor(message = 'Not implemented') {
+    super(message);
+    this.name = 'NotImplementedError';
+  }
+}
+
+/** Single error type surfaced to consumers, carrying the normalised code. */
+export class OnramperError extends Error {
+  readonly code: OnramperErrorCode;
+  readonly httpStatus?: number;
+
+  constructor(code: OnramperErrorCode, message: string, options?: { httpStatus?: number; cause?: unknown }) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
+    this.name = 'OnramperError';
+    this.code = code;
+    this.httpStatus = options?.httpStatus;
+  }
+}
+
+interface CheckoutErrorBody {
+  errorCode?: number;
+  errorMessage?: string;
+}
+
+interface OAuthErrorBody {
+  error?: string;
+  error_description?: string;
+}
+
+/** Map a checkout/headless `{ errorCode, errorMessage }` body to an OnramperError. */
+export function mapCheckoutError(httpStatus: number, body: unknown): OnramperError {
+  const parsed = (body ?? {}) as CheckoutErrorBody;
+  const code =
+    (parsed.errorCode !== undefined ? CHECKOUT_ERROR_CODES[parsed.errorCode] : undefined) ??
+    OnramperErrorCode.UPSTREAM_ERROR;
+  return new OnramperError(code, parsed.errorMessage ?? `Request failed with status ${httpStatus}`, { httpStatus });
+}
+
+/** Map a token endpoint RFC 6749 `{ error, error_description }` body to an OnramperError. */
+export function mapOAuthError(httpStatus: number, body: unknown): OnramperError {
+  const parsed = (body ?? {}) as OAuthErrorBody;
+  const code = (parsed.error ? OAUTH_ERROR_CODES[parsed.error] : undefined) ?? OnramperErrorCode.UPSTREAM_ERROR;
+  return new OnramperError(code, parsed.error_description ?? parsed.error ?? `Token request failed (${httpStatus})`, {
+    httpStatus,
+  });
+}

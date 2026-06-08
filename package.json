@@ -1,0 +1,110 @@
+{
+  "name": "@onramper/wdk-protocol-fiat",
+  "version": "0.1.0",
+  "description": "Onramper implementation of the Tether WDK IFiatProtocol — cross-platform (web, Node, React Native) on/off-ramp adapter",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "react-native": "./dist/index.native.js",
+  "exports": {
+    ".": {
+      "react-native": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.native.js"
+      },
+      "browser": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.browser.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.browser.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./dist/index.d.ts",
+          "default": "./dist/index.node.js"
+        },
+        "require": {
+          "types": "./dist/index.d.cts",
+          "default": "./dist/index.node.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint . --write",
+    "format": "biome format . --write",
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run check && npm run typecheck && npm run test && npm run build && npm run validate:exports",
+    "validate:exports": "attw --pack . --ignore-rules no-resolution && publint",
+    "prepublishOnly": "npm run validate"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/",
+    "access": "restricted"
+  },
+  "dependencies": {
+    "ulid": "^3.0.2",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@noble/curves": "^2.0.0",
+    "@noble/hashes": "^2.0.0",
+    "@react-native-async-storage/async-storage": "*",
+    "react-native": "*"
+  },
+  "peerDependenciesMeta": {
+    "@noble/curves": {
+      "optional": true
+    },
+    "@noble/hashes": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@biomejs/biome": "^2.4.14",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.0",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "publint": "^0.3.18",
+    "tsdown": "^0.21.10",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false
+}
