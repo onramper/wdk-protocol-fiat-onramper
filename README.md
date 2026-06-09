@@ -45,12 +45,20 @@ const { buyUrl } = await fiat.buy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fia
   protection without requiring Apple App Attest (which web/Node can't do) and
   without weakening the iOS attestation path.
 
+### Session scopes
+
+The data methods require the partner backend to mint the session token with the
+matching read scopes — `supported:read`, `quotes:read`, `transactions:read`
+(defined in core-utils `CLIENT_ROUTE_SCOPE_MAP`). A session missing a scope gets
+`insufficient_scope` on that method.
+
 ### Platform adapters
 
 Crypto / storage / HTTP / fingerprint are pluggable (`config.adapters`). Defaults:
 WebCrypto (web + Node), in-memory token storage (secure default — inject your own
 to persist), global `fetch`. React Native must inject a crypto adapter until v0.2.
 
-> Base URLs in `src/config/defaults.ts` and the data-endpoint paths in
-> `src/client/endpoints.ts` are placeholders pending verification against the
-> live headless routes.
+> The data routes (`GET /headless/v1/sdk/...`) are the agreed cross-repo contract
+> (core-utils scope map) but are not yet served by headless — they land in the
+> ONR-533 headless follow-up. Base URLs in `src/config/defaults.ts` still need
+> verification against the live environments.

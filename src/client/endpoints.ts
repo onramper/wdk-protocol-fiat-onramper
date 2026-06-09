@@ -3,8 +3,10 @@
  * (headless) which validates the session token + DPoP envelope. buy/sell do NOT
  * appear here — they are signed widget URLs, not API calls.
  *
- * Paths are kept in one place so they stay aligned with the headless routes; the
- * `/headless/v1` prefix mirrors `onramper-sdk`'s `HTTPBFFClient`.
+ * The data paths are a cross-repo contract: they must match the headless
+ * `sdkDataRoutes` registrations AND the `CLIENT_ROUTE_SCOPE_MAP` keys in
+ * core-utils (`GET /headless/v1/sdk/...`), where each route's required scope
+ * (`supported:read`, `quotes:read`, `transactions:read`) is defined.
  */
 export class Endpoints {
   constructor(private readonly apiBaseUrl: string) {
@@ -17,14 +19,14 @@ export class Endpoints {
   }
 
   supported(): string {
-    return `${this.apiBaseUrl}/headless/v1/supported`;
+    return `${this.apiBaseUrl}/headless/v1/sdk/supported`;
   }
 
   quote(source: string, destination: string): string {
-    return `${this.apiBaseUrl}/headless/v1/quotes/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
+    return `${this.apiBaseUrl}/headless/v1/sdk/quotes/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
   }
 
   transaction(txId: string): string {
-    return `${this.apiBaseUrl}/headless/v1/transactions/${encodeURIComponent(txId)}`;
+    return `${this.apiBaseUrl}/headless/v1/sdk/transactions/${encodeURIComponent(txId)}`;
   }
 }
