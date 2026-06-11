@@ -25,7 +25,7 @@ interface SessionManagerDeps {
 }
 
 /**
- * Owns the SDK session lifecycle for the non-attested (Tier-1) path: it mints a
+ * Owns the SDK session lifecycle for the non-attested path: it mints a
  * DPoP key, bootstraps an access token from a backend-issued session token
  * (sending `attestation.type:'none'`), and refreshes it. Concurrent callers are
  * coalesced via a single in-flight promise so we never run two exchanges at once.

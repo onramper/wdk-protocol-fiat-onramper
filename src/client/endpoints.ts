@@ -1,15 +1,14 @@
 /**
- * URL builders for the authenticated data calls. buy/sell do NOT appear here —
- * they are signed widget URLs, not API calls.
+ * URL builders for the API calls. buy/sell do NOT appear here — they are
+ * signed widget URLs, not API calls.
  *
- * The data routes are versioned endpoints OWNED BY EACH SERVICE
- * (supported/quotes/transactions) behind the API gateway — deliberately not
- * the headless BFF, which is attested-clients-only. The paths are a cross-repo
- * contract with the `CLIENT_ROUTE_SCOPE_MAP` keys in core-utils
- * (`GET /supported/v2/sdk`, `GET /quotes/v2/sdk/...`,
- * `GET /transactions/v2/sdk/...`), where each route's required scope and
- * admitted tiers are defined. Only the session bootstrap (`tokens`) goes
- * through the headless proxy — it is an OAuth endpoint, not a data route.
+ * Two auth families:
+ *   - supported/quotes are the existing public endpoints, authenticated by the
+ *     publishable apiKey alone (`Authorization` header).
+ *   - the checkout session-transaction lookup and the token exchange carry the
+ *     SDK session envelope (access token + DPoP). Checkout v2 accepts that
+ *     envelope as an alternative to the partner's Security V2 signature, so
+ *     existing signature-authenticated integrations are unaffected.
  */
 export class Endpoints {
   constructor(private readonly apiBaseUrl: string) {
@@ -22,14 +21,19 @@ export class Endpoints {
   }
 
   supported(): string {
-    return `${this.apiBaseUrl}/supported/v2/sdk`;
+    return `${this.apiBaseUrl}/supported`;
+  }
+
+  supportedCountries(): string {
+    return `${this.apiBaseUrl}/supported/countries`;
   }
 
   quote(source: string, destination: string): string {
-    return `${this.apiBaseUrl}/quotes/v2/sdk/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
+    return `${this.apiBaseUrl}/quotes/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
   }
 
-  transaction(txId: string): string {
-    return `${this.apiBaseUrl}/transactions/v2/sdk/${encodeURIComponent(txId)}`;
+  /** Checkout v2 transaction lookup, keyed by the checkout session id. */
+  checkoutTransaction(sessionId: string): string {
+    return `${this.apiBaseUrl}/checkout/session/${encodeURIComponent(sessionId)}/transaction`;
   }
 }

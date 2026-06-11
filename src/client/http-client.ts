@@ -13,14 +13,29 @@ interface AuthorizedClientDeps {
 }
 
 /**
- * Issues authenticated GET data calls (quotes, supported, transactions) carrying
- * the full SDK envelope. Recovers once from an expired session (401 →
- * invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
+ * Issues authenticated GET calls in two flavors:
+ *   - `getWithApiKey`: the publishable apiKey alone, for the public data
+ *     endpoints (supported, quotes).
+ *   - `getWithSession`: the full SDK session envelope (access token + DPoP),
+ *     for checkout v2. Recovers once from an expired session (401 →
+ *     invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
  */
 export class AuthorizedClient {
   constructor(private readonly deps: AuthorizedClientDeps) {}
 
-  async getJson<T>(url: string): Promise<T> {
+  async getWithApiKey<T>(url: string): Promise<T> {
+    const res = await this.deps.adapters.http.request({
+      method: 'GET',
+      url,
+      headers: { Authorization: this.deps.apiKey },
+    });
+    if (res.status >= 200 && res.status < 300) {
+      return JSON.parse(res.body) as T;
+    }
+    throw mapCheckoutError(res.status, safeJson(res.body));
+  }
+
+  async getWithSession<T>(url: string): Promise<T> {
     let allowSessionRetry = true;
     let dpopNonce: string | undefined;
 

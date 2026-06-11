@@ -18,15 +18,16 @@ import { OnramperFiatProtocol } from '@onramper/wdk-protocol-fiat';
 const fiat = new OnramperFiatProtocol(undefined, {
   apiKey: 'pk_prod_…',                 // publishable partner key
   environment: 'production',
-  // Your backend mints a session token (the single Security V2 call).
-  getSessionToken: async () => {
-    const r = await fetch('/onramper/session', { method: 'POST' });
-    return r.json();                   // { sessionId, sessionToken }
-  },
   // Your backend signs the widget URL (same flow you use today).
   signUrl: async (params) => {
     const r = await fetch('/onramper/sign-url', { method: 'POST', body: JSON.stringify(params) });
     return (await r.json()).url;
+  },
+  // Optional — only needed for getTransactionDetail. Your backend mints a
+  // session token (the single Security V2 call).
+  getSessionToken: async () => {
+    const r = await fetch('/onramper/session', { method: 'POST' });
+    return r.json();                   // { sessionId, sessionToken }
   },
 });
 
@@ -38,19 +39,17 @@ const { buyUrl } = await fiat.buy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fia
 
 - **`buy()` / `sell()`** are pure signed-URL builders. They call your `signUrl`
   callback and return a hosted widget deep link. No backend call, no session.
-- **`quoteBuy` / `quoteSell` / `getSupported*` / `getTransactionDetail`** are
-  authenticated data calls. They bootstrap a non-attested (Tier-1) session from
-  your backend-issued session token, mint a non-extractable ES256 DPoP key, and
-  carry the SDK security envelope on every request. This gates the API for abuse
-  protection without requiring Apple App Attest (which web/Node can't do) and
-  without weakening the iOS attestation path.
-
-### Session scopes
-
-The data methods require the partner backend to mint the session token with the
-matching read scopes — `supported:read`, `quotes:read`, `transactions:read`
-(defined in core-utils `CLIENT_ROUTE_SCOPE_MAP`). A session missing a scope gets
-`insufficient_scope` on that method.
+- **`quoteBuy` / `quoteSell` / `getSupported*`** hit the existing public data
+  endpoints (`/quotes/{source}/{destination}`, `/supported`,
+  `/supported/countries`) authenticated by the publishable apiKey alone — the
+  same contract every other Onramper client uses.
+- **`getTransactionDetail(sessionId)`** reads the checkout v2 session
+  transaction and is the one session-gated call: it bootstraps a non-attested
+  session from your backend-issued session token, mints a non-extractable ES256
+  DPoP key, and carries the SDK security envelope. Checkout v2 accepts that
+  envelope as an alternative to the partner's Security V2 request signature, so
+  existing signature-authenticated integrations are unaffected. Requires
+  `getSessionToken`; the session must carry the `checkout:read` scope.
 
 ### Platform adapters
 
@@ -58,10 +57,7 @@ Crypto / storage / HTTP / fingerprint are pluggable (`config.adapters`). Default
 WebCrypto (web + Node), in-memory token storage (secure default — inject your own
 to persist), global `fetch`. React Native must inject a crypto adapter until v0.2.
 
-> The data routes (`GET /supported/v2/sdk`, `/quotes/v2/sdk/...`,
-> `/transactions/v2/sdk/...`) are versioned endpoints owned by each service —
-> the agreed cross-repo contract (core-utils scope map) — and land in the
-> ONR-533 per-service follow-ups. The headless BFF is attested-clients-only;
-> this package's tokens never reach it beyond the OAuth bootstrap proxy. Base
-> URLs in `src/config/defaults.ts` still need verification against the live
-> environments.
+> Checkout v2's session-envelope acceptance (the `getTransactionDetail` path)
+> is a server-side follow-up; the public data endpoints work today. The
+> headless BFF stays attested-clients-only — this package's tokens never reach
+> it beyond the OAuth bootstrap proxy.

@@ -40,17 +40,21 @@ export type SignUrl = (params: SignUrlParams) => Promise<string>;
 /**
  * Consumer-provided callback that mints an SDK session token via the partner's
  * backend (the single Security V2 call). Returns the opaque `st_` token and its
- * session id. Called on first authenticated use and again whenever the SDK must
- * re-bootstrap (e.g. after a terminal token error). The token is single-use for
- * binding, so a fresh one is needed each bootstrap — hence a callback, not a string.
+ * session id. Called on first session-gated use (`getTransactionDetail`) and
+ * again whenever the SDK must re-bootstrap (e.g. after a terminal token error).
+ * The token is single-use for binding, so a fresh one is needed each bootstrap —
+ * hence a callback, not a string.
  */
 export type GetSessionToken = () => Promise<{ sessionId: string; sessionToken: string }>;
 
 export interface OnramperFiatConfig {
   /** Publishable partner API key (safe to ship in client code). */
   apiKey: string;
-  /** Mints the session token for authenticated data calls. Required. */
-  getSessionToken: GetSessionToken;
+  /**
+   * Mints the session token for session-gated calls (`getTransactionDetail`).
+   * Optional: quotes, supported lists and buy/sell work without it.
+   */
+  getSessionToken?: GetSessionToken;
   /** Signs buy/sell widget URLs. Required. */
   signUrl: SignUrl;
   /** Defaults to 'production'. */

@@ -9,13 +9,13 @@ import type { OnramperFiatConfig } from '../types/onramper.ts';
  */
 const configSchema = z.object({
   apiKey: z.string().min(1, 'apiKey is required'),
-  getSessionToken: z.function(),
+  getSessionToken: z.function().optional(),
   signUrl: z.function(),
   environment: z.enum(['production', 'sandbox', 'staging']).optional(),
   baseUrl: z.string().url().optional(),
   widgetBaseUrl: z.string().url().optional(),
   cacheTime: z.number().int().nonnegative().optional(),
-  channel: z.enum(['sdk-web', 'sdk-rn', 'sdk-node']).optional(),
+  channel: z.enum(['wdk-web', 'wdk-rn', 'wdk-node']).optional(),
   adapters: z.object({}).passthrough().optional(),
 });
 

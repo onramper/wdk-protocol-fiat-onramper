@@ -1,11 +1,13 @@
 import type { FiatTransactionDetail, FiatTxStatus } from '../types/wdk.ts';
 
 /**
- * Shape from the transactions endpoint. NOTE: confirm field names and the
- * provider status vocabulary against the live transactions/responses API during
- * verification.
+ * Shape from `GET /checkout/session/{sessionId}/transaction`: a `{valid,
+ * transactionInformation}` envelope where `transactionInformation` is an open,
+ * provider-specific record. The mapping is defensive: known aliases are tried
+ * in order and anything missing degrades rather than throws.
  */
 interface RawTransaction {
+  transactionId?: string;
   status?: string;
   cryptoAsset?: string;
   crypto?: string;
@@ -16,6 +18,7 @@ interface RawTransaction {
   txHash?: string;
   provider?: string;
   ramp?: string;
+  onramp?: string;
 }
 
 /** Normalise provider-specific status strings into the WDK status vocabulary. */
@@ -53,7 +56,8 @@ function str(value: number | string | undefined): string | undefined {
 }
 
 export function toFiatTransactionDetail(raw: unknown): FiatTransactionDetail {
-  const tx = (raw as RawTransaction) ?? {};
+  const envelope = raw as { transactionInformation?: RawTransaction } | undefined;
+  const tx = envelope?.transactionInformation ?? (raw as RawTransaction) ?? {};
   return {
     status: normaliseStatus(tx.status),
     cryptoAsset: tx.cryptoAsset ?? tx.crypto ?? '',
@@ -61,6 +65,6 @@ export function toFiatTransactionDetail(raw: unknown): FiatTransactionDetail {
     fiatAmount: str(tx.fiatAmount),
     cryptoAmount: str(tx.cryptoAmount),
     txHash: tx.txHash,
-    provider: tx.provider ?? tx.ramp,
+    provider: tx.provider ?? tx.ramp ?? tx.onramp,
   };
 }

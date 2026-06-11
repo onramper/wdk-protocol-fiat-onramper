@@ -5,6 +5,7 @@ import { SessionManager } from '../client/session-manager.ts';
 import { buildBuyUrl, buildSellUrl } from '../client/widget-url.ts';
 import { DEFAULT_CACHE_TIME_MS, ENVIRONMENT_URLS } from '../config/defaults.ts';
 import { validateConfig } from '../config/schema.ts';
+import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
 import { toFiatQuote } from '../transforms/quote.ts';
 import { toSupportedCountries, toSupportedCryptoAssets, toSupportedFiatCurrencies } from '../transforms/supported.ts';
 import { toFiatTransactionDetail } from '../transforms/transaction.ts';
@@ -29,17 +30,22 @@ import { TtlCache } from '../utils/cache.ts';
 /**
  * Onramper's implementation of the Tether WDK `IFiatProtocol`.
  *
- * Two distinct paths by design:
+ * Three distinct paths by design:
  *   - `buy`/`sell` build a Security V2 signed widget deep link via the consumer's
  *     `signUrl` callback — no backend call, no session.
- *   - `quote*` / `getSupported*` / `getTransactionDetail` are authenticated data
- *     calls gated by a Tier-1 (non-attested) session token + DPoP envelope.
+ *   - `quote*` / `getSupported*` hit the existing public data endpoints with the
+ *     publishable apiKey alone — no session.
+ *   - `getTransactionDetail` reads the checkout v2 session transaction and is the
+ *     one call gated by a session token + DPoP envelope (requires
+ *     `getSessionToken` in the config).
  */
 export class OnramperFiatProtocol implements IFiatProtocol {
   private readonly config: OnramperFiatConfig;
   private readonly endpoints: Endpoints;
   private readonly client: AuthorizedClient;
   private readonly supportedCache: TtlCache<unknown>;
+  private readonly countriesCache: TtlCache<unknown>;
+  private readonly hasSessionTokenProvider: boolean;
 
   constructor(account: WdkAccount | undefined, config: OnramperFiatConfig) {
     this.config = validateConfig(config);
@@ -53,15 +59,25 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     const apiBaseUrl = config.baseUrl ?? urls.apiBaseUrl;
 
     this.endpoints = new Endpoints(apiBaseUrl);
+    this.hasSessionTokenProvider = typeof config.getSessionToken === 'function';
     const session = new SessionManager({
       adapters,
       endpoints: this.endpoints,
       apiKey: config.apiKey,
       channel,
-      getSessionToken: config.getSessionToken,
+      getSessionToken:
+        config.getSessionToken ??
+        (() => {
+          throw new OnramperError(
+            OnramperErrorCode.INVALID_CONFIG,
+            'getSessionToken is required for getTransactionDetail',
+          );
+        }),
     });
     this.client = new AuthorizedClient({ adapters, session, apiKey: config.apiKey, channel });
-    this.supportedCache = new TtlCache<unknown>(config.cacheTime ?? DEFAULT_CACHE_TIME_MS);
+    const cacheTtl = config.cacheTime ?? DEFAULT_CACHE_TIME_MS;
+    this.supportedCache = new TtlCache<unknown>(cacheTtl);
+    this.countriesCache = new TtlCache<unknown>(cacheTtl);
 
     // `account` is accepted for WDK signature parity and reserved for deriving a
     // default recipient/refund address (wired in a later phase).
@@ -96,8 +112,15 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     return { sellUrl: await buildSellUrl(this.config.signUrl, this.config.apiKey, options) };
   }
 
+  /** `txId` is the checkout v2 session id returned by the intent call. */
   async getTransactionDetail(txId: string, _direction?: FiatDirection): Promise<FiatTransactionDetail> {
-    const raw = await this.client.getJson<unknown>(this.endpoints.transaction(txId));
+    if (!this.hasSessionTokenProvider) {
+      throw new OnramperError(
+        OnramperErrorCode.INVALID_CONFIG,
+        'getTransactionDetail requires the getSessionToken callback in OnramperFiatConfig',
+      );
+    }
+    const raw = await this.client.getWithSession<unknown>(this.endpoints.checkoutTransaction(txId));
     return toFiatTransactionDetail(raw);
   }
 
@@ -110,7 +133,13 @@ export class OnramperFiatProtocol implements IFiatProtocol {
   }
 
   async getSupportedCountries(): Promise<SupportedCountry[]> {
-    return toSupportedCountries(await this.fetchSupported());
+    const cached = this.countriesCache.get();
+    if (cached !== undefined) {
+      return toSupportedCountries(cached);
+    }
+    const raw = await this.client.getWithApiKey<unknown>(this.endpoints.supportedCountries());
+    this.countriesCache.set(raw);
+    return toSupportedCountries(raw);
   }
 
   private async fetchSupported(): Promise<unknown> {
@@ -118,7 +147,7 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     if (cached !== undefined) {
       return cached;
     }
-    const raw = await this.client.getJson<unknown>(this.endpoints.supported());
+    const raw = await this.client.getWithApiKey<unknown>(this.endpoints.supported());
     this.supportedCache.set(raw);
     return raw;
   }
@@ -142,6 +171,6 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     if (options.country) {
       url.searchParams.set('country', options.country);
     }
-    return this.client.getJson<unknown>(url.toString());
+    return this.client.getWithApiKey<unknown>(url.toString());
   }
 }
