@@ -36,6 +36,10 @@ export class SessionManager {
   private accessToken?: string;
   private accessTokenExpSec = 0;
   private refreshToken?: string;
+  /** Session id (`sid`) the partner backend issued alongside the session token.
+   *  partners-api's refresh grant requires it and never echoes it back, so it's
+   *  captured at bootstrap and resent on every refresh (mirrors the iOS SDK). */
+  private sessionId?: string;
   private inFlight?: Promise<string>;
 
   constructor(private readonly deps: SessionManagerDeps) {}
@@ -45,6 +49,7 @@ export class SessionManager {
     this.accessToken = undefined;
     this.accessTokenExpSec = 0;
     this.refreshToken = undefined;
+    this.sessionId = undefined;
   }
 
   /** Marks the current access token unusable so the next call refreshes (or re-bootstraps). */
@@ -100,14 +105,20 @@ export class SessionManager {
   }
 
   private async bootstrap(): Promise<string> {
-    const { sessionToken } = await this.deps.getSessionToken();
+    const { sessionId, sessionToken } = await this.deps.getSessionToken();
+    this.sessionId = sessionId;
     const fingerprint = await this.getFingerprint();
-    const response = await this.tokenRequest({
-      grant_type: 'session_token',
-      session_token: sessionToken,
-      attestation: { type: 'none' },
-      device_fingerprint: fingerprint,
-    });
+    // The device fingerprint rides on the X-Onramper-Device HEADER (SDK-SPEC §5);
+    // partners-api hard-rejects the exchange without it and its body schema has
+    // no device field, so a body-only fingerprint is silently dropped.
+    const response = await this.tokenRequest(
+      {
+        grant_type: 'session_token',
+        session_token: sessionToken,
+        attestation: { type: 'none' },
+      },
+      { device: fingerprint },
+    );
     this.store(response);
     return response.access_token;
   }
@@ -116,9 +127,15 @@ export class SessionManager {
     if (!this.refreshToken) {
       throw new OnramperError(OnramperErrorCode.INVALID_SDK_SESSION, 'No refresh token available');
     }
+    if (!this.sessionId) {
+      throw new OnramperError(OnramperErrorCode.INVALID_SDK_SESSION, 'No session id available for refresh');
+    }
+    // partners-api's refresh grant requires session_id (refreshTokenSchema) and
+    // resolves the session row by it; the refresh token alone is insufficient.
     const response = await this.tokenRequest({
       grant_type: 'refresh_token',
       refresh_token: this.refreshToken,
+      session_id: this.sessionId,
     });
     this.store(response);
     return response.access_token;
@@ -135,8 +152,15 @@ export class SessionManager {
   /**
    * POSTs to the token endpoint with a DPoP proof bound to that endpoint. If the
    * server demands a DPoP nonce (`use_dpop_nonce`), retries once echoing it.
+   *
+   * `extraHeaders` carries request-specific headers — the bootstrap exchange
+   * adds `device` (the X-Onramper-Device fingerprint); refresh sends none.
    */
-  private async tokenRequest(body: Record<string, unknown>, dpopNonce?: string): Promise<TokenResponse> {
+  private async tokenRequest(
+    body: Record<string, unknown>,
+    extraHeaders: { device?: string } = {},
+    dpopNonce?: string,
+  ): Promise<TokenResponse> {
     const url = this.deps.endpoints.tokens(this.deps.apiKey);
     const key = await this.getKey();
     const dpopProof = await buildDpopProof(this.deps.adapters.crypto, key, { method: 'POST', url, nonce: dpopNonce });
@@ -151,6 +175,7 @@ export class SessionManager {
         'X-Onramper-Nonce': newNonce(),
         'X-Onramper-Timestamp': new Date().toISOString(),
         'X-Onramper-Channel': this.deps.channel,
+        ...(extraHeaders.device ? { 'X-Onramper-Device': extraHeaders.device } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -164,7 +189,7 @@ export class SessionManager {
     const isNonceChallenge =
       (parsed as { error?: string } | undefined)?.error === 'use_dpop_nonce' && serverNonce && !dpopNonce;
     if (isNonceChallenge) {
-      return this.tokenRequest(body, serverNonce);
+      return this.tokenRequest(body, extraHeaders, serverNonce);
     }
     throw mapOAuthError(res.status, parsed);
   }

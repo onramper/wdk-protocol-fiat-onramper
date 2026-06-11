@@ -151,6 +151,60 @@ describe('IFiatProtocol contract', () => {
     const txCall = http.calls.find((c) => c.url.includes('/checkout/session/'));
     expect(txCall?.headers['X-Onramper-SDK-Session']).toBe('Bearer at_test_token');
     expect(txCall?.headers['X-Onramper-DPoP']).toBeTruthy();
+
+    // The bootstrap exchange must send the fingerprint as the X-Onramper-Device
+    // HEADER (partners-api hard-requires it and its body schema discards a body
+    // field), and the SAME fingerprint must ride the authenticated call so it
+    // hashes to the access token's `did` claim.
+    const tokenCall = http.calls.find((c) => c.url.includes('client-sessions/tokens'));
+    expect(tokenCall?.headers['X-Onramper-Device']).toBeTruthy();
+    expect(tokenCall?.headers['X-Onramper-Device']).toBe(txCall?.headers['X-Onramper-Device']);
+    const bootstrapBody = JSON.parse(tokenCall?.body ?? '{}');
+    expect(bootstrapBody.grant_type).toBe('session_token');
+    expect(bootstrapBody.attestation).toEqual({ type: 'none' });
+    expect('device_fingerprint' in bootstrapBody).toBe(false);
+  });
+
+  it('refresh grant resends session_id and refresh_token (partners-api requires both)', async () => {
+    let mintCount = 0;
+    const http = mockHttp([
+      {
+        match: 'client-sessions/tokens',
+        handler: () => {
+          mintCount += 1;
+          // First mint = bootstrap (long-lived); second = refresh response.
+          return json(200, {
+            access_token: `at_${mintCount}`,
+            refresh_token: 'rt_test_token',
+            expires_in: mintCount === 1 ? -1 : 900, // force the next call to refresh
+            device_id: 'dev_test',
+            tier: 1,
+          });
+        },
+      },
+      {
+        match: '/checkout/session/sess_abc/transaction',
+        handler: () =>
+          json(200, {
+            valid: true,
+            transactionInformation: { transactionId: 'tx_1', status: 'pending', onramp: 'provider-a' },
+          }),
+      },
+    ]);
+    const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
+
+    await proto.getTransactionDetail('sess_abc');
+    await proto.getTransactionDetail('sess_abc');
+
+    const tokenCalls = http.calls.filter((c) => c.url.includes('client-sessions/tokens'));
+    const refreshCall = tokenCalls.find((c) => {
+      const b = JSON.parse(c.body ?? '{}');
+      return b.grant_type === 'refresh_token';
+    });
+    expect(refreshCall).toBeTruthy();
+    const refreshBody = JSON.parse(refreshCall?.body ?? '{}');
+    expect(refreshBody.refresh_token).toBe('rt_test_token');
+    expect(refreshBody.session_id).toBe('sess_test');
   });
 
   it('getTransactionDetail() without getSessionToken fails fast with a config error', async () => {
