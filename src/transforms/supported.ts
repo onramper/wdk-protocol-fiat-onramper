@@ -69,7 +69,7 @@ export function toSupportedCountries(raw: unknown): SupportedCountry[] {
   const list: RawCountry[] = Array.isArray(unwrapped) ? unwrapped : [];
   return list.map((c) => ({
     code: c.countryCode ?? c.code ?? c.id ?? '',
-    name: c.countryName ?? c.name ?? c.code ?? c.id ?? '',
+    name: c.countryName ?? c.name ?? c.countryCode ?? c.code ?? c.id ?? '',
     // /supported/countries carries no per-country buy/sell flags — presence in the
     // list means supported, so both default on.
     isBuyAllowed: c.isBuyAllowed ?? true,

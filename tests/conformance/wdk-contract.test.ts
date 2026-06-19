@@ -102,7 +102,12 @@ describe('IFiatProtocol contract', () => {
         // buy/sell flags — mirror that exactly so the mapping can't silently blank.
         match: '/supported/countries',
         handler: () =>
-          json(200, { message: [{ countryCode: 'AD', countryName: 'Andorra' }, { countryCode: 'US', countryName: 'United States' }] }),
+          json(200, {
+            message: [
+              { countryCode: 'AD', countryName: 'Andorra' },
+              { countryCode: 'US', countryName: 'United States' },
+            ],
+          }),
       },
     ]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
@@ -113,6 +118,11 @@ describe('IFiatProtocol contract', () => {
       { code: 'AD', name: 'Andorra', isBuyAllowed: true, isSellAllowed: true },
       { code: 'US', name: 'United States', isBuyAllowed: true, isSellAllowed: true },
     ]);
+    // Public data path: apiKey only — no session bootstrap, no SDK envelope.
+    const countriesCall = http.calls.find((c) => c.url.includes('/supported/countries'));
+    expect(countriesCall?.headers.Authorization).toBe('pk_test_abc123');
+    expect(countriesCall?.headers['X-Onramper-SDK-Session']).toBeUndefined();
+    expect(http.calls.some((c) => c.url.includes('client-sessions/tokens'))).toBe(false);
   });
 
   it('quoteBuy() hits the public quotes endpoint and maps the best quote', async () => {
