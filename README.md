@@ -48,16 +48,39 @@ const { buyUrl } = await fiat.buy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fia
   session from your backend-issued session token, mints a non-extractable ES256
   DPoP key, and carries the SDK security envelope. Checkout v2 accepts that
   envelope as an alternative to the partner's Security V2 request signature, so
-  existing signature-authenticated integrations are unaffected. Requires
-  `getSessionToken`; the session must carry the `checkout:read` scope.
+  existing signature-authenticated integrations are unaffected. `getSessionToken`
+  is optional for the other methods but required here; the session must carry the
+  `checkout:read` scope (the only session-gated call, `getTransactionDetail`, is a
+  read).
+
+### Session bootstrap contract (partner-mints-session)
+
+`getSessionToken` is a callback your backend implements. The SDK never holds your
+partner secret. The flow:
+
+1. Your server makes a single Security V2-signed POST to the partners-api public
+   session-creation endpoint:
+   ```
+   POST /partners/v2/{apiKey}/client-sessions
+   ```
+   This returns `{ sessionId, sessionToken }`.
+2. Your server returns both values to the client via `getSessionToken()`.
+3. The SDK exchanges `sessionToken` for a short-lived access token (DPoP-bound)
+   by POSTing to the token endpoint `/partners/v2/{apiKey}/client-sessions/tokens`
+   — `htu` in the DPoP proof equals that full URL, binding proof-of-possession to
+   the correct origin and path.
+4. Refresh calls reuse the same endpoint, re-sending `session_id` alongside the
+   `refresh_token` (partners-api requires both for refresh grants).
+
+Token endpoint URLs by environment:
+
+| Environment | URL |
+|---|---|
+| production | `https://api.onramper.com/partners/v2/{apiKey}/client-sessions/tokens` |
+| staging / sandbox | `https://api-stg.onramper.com/partners/v2/{apiKey}/client-sessions/tokens` |
 
 ### Platform adapters
 
 Crypto / storage / HTTP / fingerprint are pluggable (`config.adapters`). Defaults:
 WebCrypto (web + Node), in-memory token storage (secure default — inject your own
 to persist), global `fetch`.
-
-> Checkout v2's session-envelope acceptance (the `getTransactionDetail` path)
-> is a server-side follow-up; the public data endpoints work today. The
-> headless BFF stays attested-clients-only — this package's tokens never reach
-> it beyond the OAuth bootstrap proxy.

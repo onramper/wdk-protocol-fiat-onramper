@@ -157,6 +157,11 @@ describe('IFiatProtocol contract', () => {
     // field), and the SAME fingerprint must ride the authenticated call so it
     // hashes to the access token's `did` claim.
     const tokenCall = http.calls.find((c) => c.url.includes('client-sessions/tokens'));
+    // Pin the full direct partners-api route: the DPoP htu is signed against this
+    // exact URL, so a regression back to the headless proxy path would silently
+    // break proof-of-possession — a substring match alone wouldn't catch it.
+    expect(tokenCall?.url).toContain('/partners/v2/pk_test_abc123/client-sessions/tokens');
+    expect(tokenCall?.url).not.toContain('/headless');
     expect(tokenCall?.headers['X-Onramper-Device']).toBeTruthy();
     expect(tokenCall?.headers['X-Onramper-Device']).toBe(txCall?.headers['X-Onramper-Device']);
     const bootstrapBody = JSON.parse(tokenCall?.body ?? '{}');
