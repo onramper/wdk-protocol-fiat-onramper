@@ -24,6 +24,10 @@ interface RawFiat {
 }
 
 interface RawCountry {
+  // The live wire keys are `countryCode`/`countryName`; the rest are accepted as
+  // fallbacks so a future shape change degrades instead of blanking every entry.
+  countryCode?: string;
+  countryName?: string;
   code?: string;
   id?: string;
   name?: string;
@@ -64,8 +68,10 @@ export function toSupportedCountries(raw: unknown): SupportedCountry[] {
   const unwrapped = unwrap(raw);
   const list: RawCountry[] = Array.isArray(unwrapped) ? unwrapped : [];
   return list.map((c) => ({
-    code: c.code ?? c.id ?? '',
-    name: c.name ?? c.code ?? c.id ?? '',
+    code: c.countryCode ?? c.code ?? c.id ?? '',
+    name: c.countryName ?? c.name ?? c.countryCode ?? c.code ?? c.id ?? '',
+    // /supported/countries carries no per-country buy/sell flags — presence in the
+    // list means supported, so both default on.
     isBuyAllowed: c.isBuyAllowed ?? true,
     isSellAllowed: c.isSellAllowed ?? true,
   }));

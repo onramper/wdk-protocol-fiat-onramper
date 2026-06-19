@@ -95,18 +95,34 @@ describe('IFiatProtocol contract', () => {
     expect(http.calls.filter((c) => c.url.includes('/supported'))).toHaveLength(1);
   });
 
-  it('getSupportedCountries() uses the dedicated countries endpoint', async () => {
+  it('getSupportedCountries() maps the live countryCode/countryName wire shape', async () => {
     const http = mockHttp([
       {
+        // Real /supported/countries items are {countryCode, countryName} with no
+        // buy/sell flags — mirror that exactly so the mapping can't silently blank.
         match: '/supported/countries',
-        handler: () => json(200, { message: [{ code: 'US', name: 'United States', isSellAllowed: false }] }),
+        handler: () =>
+          json(200, {
+            message: [
+              { countryCode: 'AD', countryName: 'Andorra' },
+              { countryCode: 'US', countryName: 'United States' },
+            ],
+          }),
       },
     ]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
     const countries = await proto.getSupportedCountries();
 
-    expect(countries).toEqual([{ code: 'US', name: 'United States', isBuyAllowed: true, isSellAllowed: false }]);
+    expect(countries).toEqual([
+      { code: 'AD', name: 'Andorra', isBuyAllowed: true, isSellAllowed: true },
+      { code: 'US', name: 'United States', isBuyAllowed: true, isSellAllowed: true },
+    ]);
+    // Public data path: apiKey only — no session bootstrap, no SDK envelope.
+    const countriesCall = http.calls.find((c) => c.url.includes('/supported/countries'));
+    expect(countriesCall?.headers.Authorization).toBe('pk_test_abc123');
+    expect(countriesCall?.headers['X-Onramper-SDK-Session']).toBeUndefined();
+    expect(http.calls.some((c) => c.url.includes('client-sessions/tokens'))).toBe(false);
   });
 
   it('quoteBuy() hits the public quotes endpoint and maps the best quote', async () => {
