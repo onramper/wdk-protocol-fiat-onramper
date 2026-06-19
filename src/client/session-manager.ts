@@ -83,9 +83,18 @@ export class SessionManager {
     if (this.inFlight) {
       return this.inFlight;
     }
-    this.inFlight = this.acquire().finally(() => {
-      this.inFlight = undefined;
-    });
+    // Single chokepoint for the single-error-type guarantee: any raw throw from
+    // an adapter (HTTP/crypto) or a non-OAuth refresh failure surfaces here as an
+    // OnramperError instead of a native exception.
+    this.inFlight = this.acquire()
+      .catch((err) => {
+        throw err instanceof OnramperError
+          ? err
+          : new OnramperError(OnramperErrorCode.UPSTREAM_ERROR, 'Failed to obtain access token', { cause: err });
+      })
+      .finally(() => {
+        this.inFlight = undefined;
+      });
     return this.inFlight;
   }
 

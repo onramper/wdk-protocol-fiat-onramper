@@ -191,6 +191,42 @@ describe('token lifecycle', () => {
     expect(decodeProofPayload(second.headers['X-Onramper-DPoP'] as string).nonce).toBe('srv-nonce-xyz');
   });
 
+  it('a raw network throw during the token exchange surfaces as OnramperError', async () => {
+    const http = mockHttp([
+      {
+        match: 'client-sessions/tokens',
+        handler: () => {
+          throw new Error('ECONNRESET');
+        },
+      },
+      txOk,
+    ]);
+    await expect(
+      new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
+    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
+  });
+
+  it('a raw failure during refresh surfaces as OnramperError, not a native throw', async () => {
+    let mint = 0;
+    const http = mockHttp([
+      {
+        match: 'client-sessions/tokens',
+        handler: (req) => {
+          if (JSON.parse(req.body ?? '{}').grant_type === 'refresh_token') {
+            throw new Error('socket hang up');
+          }
+          mint += 1;
+          return json(200, { access_token: 'at', refresh_token: 'rt', expires_in: -1, tier: 1 });
+        },
+      },
+      txOk,
+    ]);
+    const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
+    await p.getTransactionDetail('s'); // bootstrap mints an already-expired token
+    await expect(p.getTransactionDetail('s')).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
+    expect(mint).toBe(1); // refresh failed raw → not re-bootstrapped (session preserved)
+  });
+
   it('concurrent callers coalesce into a single token exchange (single-flight)', async () => {
     let mints = 0;
     const http = mockHttp([
