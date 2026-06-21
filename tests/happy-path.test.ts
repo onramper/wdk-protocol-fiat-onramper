@@ -28,6 +28,7 @@ describe('happy paths not covered by the conformance suite', () => {
     expect(quote.provider).toBe('provider-b');
     expect(quote.rate).toBe('3000');
     const call = http.calls.find((c) => c.url.includes('/quotes/eth/usd'));
+    expect(call).toBeDefined();
     expect(call?.url).toContain('type=sell');
     expect(call?.url).toContain('amount=0.1');
     expect(call?.headers.Authorization).toBe('pk_test_abc123');
@@ -87,6 +88,8 @@ describe('happy paths not covered by the conformance suite', () => {
     await proto.getTransactionDetail('sess_abc');
 
     const txCall = http.calls.find((c) => c.url.includes('/checkout/session/'));
+    expect(txCall).toBeDefined();
+    expect(txCall?.headers['X-Onramper-DPoP']).toBeTruthy();
     const proof = decodeProofPayload(txCall?.headers['X-Onramper-DPoP'] as string);
     expect(proof.htm).toBe('GET');
     expect(proof.htu).toBe('https://api-stg.onramper.com/checkout/session/sess_abc/transaction');
