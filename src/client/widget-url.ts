@@ -27,6 +27,7 @@ export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, options: Buy
     memo: options.memo,
     paymentMethod: options.paymentMethod,
     country: options.country,
+    quoteId: options.quoteId,
   };
   return signUrl(params);
 }
@@ -43,6 +44,7 @@ export async function buildSellUrl(signUrl: SignUrl, apiKey: string, options: Se
     memo: options.memo,
     paymentMethod: options.paymentMethod,
     country: options.country,
+    quoteId: options.quoteId,
   };
   return signUrl(params);
 }

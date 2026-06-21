@@ -29,6 +29,8 @@ export interface SignUrlParams {
   memo?: string;
   paymentMethod?: string;
   country?: string;
+  /** Pins the widget to a specific quote when the caller passed one. */
+  quoteId?: string;
 }
 
 /**

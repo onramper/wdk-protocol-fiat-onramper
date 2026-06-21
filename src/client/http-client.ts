@@ -1,6 +1,7 @@
 import type { Adapters } from '../adapters/types.ts';
-import { mapCheckoutError, OnramperError, OnramperErrorCode } from '../errors/index.ts';
+import { mapCheckoutError, OnramperErrorCode } from '../errors/index.ts';
 import type { OnramperChannel } from '../types/onramper.ts';
+import { parseJsonBody } from '../utils/json.ts';
 import { buildDpopProof } from './dpop.ts';
 import { buildEnvelopeHeaders, newNonce } from './headers.ts';
 import type { SessionManager } from './session-manager.ts';
@@ -30,7 +31,7 @@ export class AuthorizedClient {
       headers: { Authorization: this.deps.apiKey },
     });
     if (res.status >= 200 && res.status < 300) {
-      return JSON.parse(res.body) as T;
+      return parseJsonBody<T>(res.body);
     }
     throw mapCheckoutError(res.status, safeJson(res.body));
   }
@@ -63,7 +64,7 @@ export class AuthorizedClient {
       });
 
       if (res.status >= 200 && res.status < 300) {
-        return JSON.parse(res.body) as T;
+        return parseJsonBody<T>(res.body);
       }
 
       const parsed = safeJson(res.body);
@@ -93,12 +94,4 @@ function safeJson(body: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-/** Narrow helper used by transforms to assert a present field. */
-export function requireField<T>(value: T | undefined | null, name: string): T {
-  if (value === undefined || value === null) {
-    throw new OnramperError(OnramperErrorCode.DECODE_ERROR, `Expected field "${name}" missing in response`);
-  }
-  return value;
 }

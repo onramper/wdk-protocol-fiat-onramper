@@ -45,7 +45,10 @@ export function toFiatQuote(
     : Array.isArray((raw as { quotes?: RawQuote[] })?.quotes)
       ? (raw as { quotes: RawQuote[] }).quotes
       : [];
-  const best = list.find((q) => !q.errors || q.errors.length === 0);
+  // Require a priced entry, not just an error-free one: a rate-less item maps to
+  // a quote with a blank `rate` (the same silent-empty trap the countries
+  // transform fell into), so treat it as no-quote.
+  const best = list.find((q) => (!q.errors || q.errors.length === 0) && q.rate != null);
   if (!best) {
     throw new OnramperError(OnramperErrorCode.QUOTE_UNAVAILABLE, 'No quote available for the requested pair');
   }
