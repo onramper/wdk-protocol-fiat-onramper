@@ -1,0 +1,97 @@
+import type { Adapters } from '../adapters/types.ts';
+import { mapCheckoutError, OnramperErrorCode } from '../errors/index.ts';
+import type { OnramperChannel } from '../types/onramper.ts';
+import { parseJsonBody } from '../utils/json.ts';
+import { buildDpopProof } from './dpop.ts';
+import { buildEnvelopeHeaders, newNonce } from './headers.ts';
+import type { SessionManager } from './session-manager.ts';
+
+interface AuthorizedClientDeps {
+  adapters: Adapters;
+  session: SessionManager;
+  apiKey: string;
+  channel: OnramperChannel;
+}
+
+/**
+ * Issues authenticated GET calls in two flavors:
+ *   - `getWithApiKey`: the publishable apiKey alone, for the public data
+ *     endpoints (supported, quotes).
+ *   - `getWithSession`: the full SDK session envelope (access token + DPoP),
+ *     for checkout v2. Recovers once from an expired session (401 →
+ *     invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
+ */
+export class AuthorizedClient {
+  constructor(private readonly deps: AuthorizedClientDeps) {}
+
+  async getWithApiKey<T>(url: string): Promise<T> {
+    const res = await this.deps.adapters.http.request({
+      method: 'GET',
+      url,
+      headers: { Authorization: this.deps.apiKey },
+    });
+    if (res.status >= 200 && res.status < 300) {
+      return parseJsonBody<T>(res.body);
+    }
+    throw mapCheckoutError(res.status, safeJson(res.body));
+  }
+
+  async getWithSession<T>(url: string): Promise<T> {
+    let allowSessionRetry = true;
+    let dpopNonce: string | undefined;
+
+    for (;;) {
+      const accessToken = await this.deps.session.getAccessToken();
+      const [key, fingerprint] = await Promise.all([this.deps.session.getKey(), this.deps.session.getFingerprint()]);
+      const dpopProof = await buildDpopProof(this.deps.adapters.crypto, key, {
+        method: 'GET',
+        url,
+        accessToken,
+        nonce: dpopNonce,
+      });
+
+      const res = await this.deps.adapters.http.request({
+        method: 'GET',
+        url,
+        headers: buildEnvelopeHeaders({
+          apiKey: this.deps.apiKey,
+          channel: this.deps.channel,
+          accessToken,
+          dpopProof,
+          deviceFingerprint: fingerprint,
+          nonce: newNonce(),
+        }),
+      });
+
+      if (res.status >= 200 && res.status < 300) {
+        return parseJsonBody<T>(res.body);
+      }
+
+      const parsed = safeJson(res.body);
+
+      // DPoP nonce challenge: retry once echoing the server-provided nonce.
+      const serverNonce = res.headers['dpop-nonce'] ?? res.headers['DPoP-Nonce'];
+      if (serverNonce && !dpopNonce) {
+        dpopNonce = serverNonce;
+        continue;
+      }
+
+      // Stale session: refresh once, then retry the call.
+      const error = mapCheckoutError(res.status, parsed);
+      if (res.status === 401 && allowSessionRetry && error.code === OnramperErrorCode.INVALID_SDK_SESSION) {
+        allowSessionRetry = false;
+        this.deps.session.invalidateAccessToken();
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+function safeJson(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+}
