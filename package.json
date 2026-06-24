@@ -63,7 +63,7 @@
     "prepublishOnly": "npm run validate"
   },
   "publishConfig": {
-    "registry": "https://registry.npmjs.org/",
+    "registry": "https://registry.npmjs.org",
     "access": "public",
     "provenance": true
   },
