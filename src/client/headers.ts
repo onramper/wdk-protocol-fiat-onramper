@@ -23,9 +23,9 @@ function platformForChannel(channel: OnramperChannel): string {
 }
 
 /**
- * The per-request security envelope enforced by the API `auth middleware` middleware.
- * Every authenticated data call carries a fresh DPoP proof + nonce + timestamp;
- * the device fingerprint must hash to the access token's `did` claim.
+ * The per-request security envelope enforced by the API. Every authenticated
+ * data call carries a fresh DPoP proof, nonce, timestamp, and device
+ * fingerprint.
  */
 export function buildEnvelopeHeaders(input: EnvelopeInput): Record<string, string> {
   return {

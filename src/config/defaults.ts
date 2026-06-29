@@ -9,8 +9,7 @@ interface EnvUrls {
 }
 
 /**
- * Per-environment base URLs (hosts verified against the iOS SDK's
- * config). Sandbox and staging point at the staging stack;
+ * Per-environment base URLs. Sandbox and staging point at the staging stack;
  * they are split so a consumer can opt into "sandbox semantics" explicitly.
  * Override via `OnramperFiatConfig.baseUrl`.
  */

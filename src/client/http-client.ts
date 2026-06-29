@@ -18,7 +18,7 @@ interface AuthorizedClientDeps {
  *   - `getWithApiKey`: the publishable apiKey alone, for the public data
  *     endpoints (supported, quotes).
  *   - `getWithSession`: the full SDK session envelope (access token + DPoP),
- *     for checkout session. Recovers once from an expired session (401 →
+ *     for the checkout session API. Recovers once from an expired session (401 →
  *     invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
  */
 export class AuthorizedClient {

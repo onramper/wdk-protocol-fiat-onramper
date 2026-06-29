@@ -1,12 +1,11 @@
 /**
  * Error taxonomy for the SDK. Two wire formats feed into one normalised enum:
  *
- *   1. Checkout/the API endpoints return `{ errorCode: <int>, errorMessage }`.
+ *   1. The API returns `{ errorCode: <int>, errorMessage }`.
  *   2. Token (OAuth) endpoints return RFC 6749 `{ error, error_description? }`.
  *
- * The numeric and string maps below MUST stay in sync with
- * `the service/src/errors/index.ts` and the the API OAuth errors —
- * that mapping is a cross-repo contract. Mirror, do not invent.
+ * The numeric and string maps below MUST stay in sync with the API's error
+ * responses. Mirror, do not invent.
  */
 export enum OnramperErrorCode {
   INVALID_CONFIG = 'invalid_config',
@@ -27,7 +26,7 @@ export enum OnramperErrorCode {
   DECODE_ERROR = 'decode_error',
 }
 
-/** Numeric codes from checkout/the API endpoints → normalised code. */
+/** Numeric codes from the API → normalised code. */
 export const CHECKOUT_ERROR_CODES: Readonly<Record<number, OnramperErrorCode>> = {
   40101: OnramperErrorCode.UNAUTHORIZED,
   40102: OnramperErrorCode.INVALID_SDK_SESSION,

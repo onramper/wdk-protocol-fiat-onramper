@@ -151,7 +151,7 @@ describe('IFiatProtocol contract', () => {
     expect(call?.headers['X-Onramper-DPoP']).toBeUndefined();
   });
 
-  it('getTransactionDetail() carries the SDK session envelope to checkout session', async () => {
+  it('getTransactionDetail() carries the SDK session envelope to the checkout session', async () => {
     const http = mockHttp([
       tokenRoute,
       {
@@ -177,13 +177,11 @@ describe('IFiatProtocol contract', () => {
     expect(proof.htu).toBe('https://api-stg.onramper.com/checkout/session/sess_abc/transaction');
 
     // The bootstrap exchange must send the fingerprint as the X-Onramper-Device
-    // HEADER (the API hard-requires it and its body schema discards a body
-    // field), and the SAME fingerprint must ride the authenticated call so it
-    // hashes to the access token's `did` claim.
+    // HEADER (the API requires it as a header), and the SAME fingerprint must
+    // ride the authenticated call.
     const tokenCall = http.calls.find((c) => c.url.includes('client-sessions/tokens'));
-    // Pin the full direct the API route: the DPoP htu is signed against this
-    // exact URL, so a regression back to the the API proxy path would silently
-    // break proof-of-possession — a substring match alone wouldn't catch it.
+    // Pin the exact token URL: the DPoP htu is signed against it, so a routing
+    // regression would silently break proof-of-possession.
     expect(tokenCall?.url).toContain('/partners/v2/pk_test_abc123/client-sessions/tokens');
     expect(tokenCall?.url).not.toContain('/the API');
     expect(tokenCall?.headers['X-Onramper-Device']).toBeTruthy();
@@ -194,7 +192,7 @@ describe('IFiatProtocol contract', () => {
     expect('device_fingerprint' in bootstrapBody).toBe(false);
   });
 
-  it('refresh grant resends session_id and refresh_token (the API requires both)', async () => {
+  it('refresh grant resends session_id and refresh_token', async () => {
     let mintCount = 0;
     const http = mockHttp([
       {

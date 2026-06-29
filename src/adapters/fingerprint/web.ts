@@ -3,9 +3,9 @@ import type { CryptoAdapter, FingerprintAdapter } from '../types.ts';
 
 /**
  * Browser device fingerprint. A coarse, stable-per-browser hash of low-entropy
- * signals (UA, platform, language, screen, timezone). It is a soft abuse signal
- * bound into the access token `did` claim — not a security boundary — so we
- * avoid invasive techniques (canvas/WebGL) that hurt privacy for little gain.
+ * signals (UA, platform, language, screen, timezone). It is a soft abuse signal,
+ * not a security boundary, so we avoid invasive techniques (canvas/WebGL) that
+ * hurt privacy for little gain.
  */
 export function createWebFingerprintAdapter(crypto: CryptoAdapter): FingerprintAdapter {
   return {

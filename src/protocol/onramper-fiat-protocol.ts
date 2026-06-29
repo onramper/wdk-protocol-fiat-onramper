@@ -31,11 +31,11 @@ import { TtlCache } from '../utils/cache.ts';
  * Onramper's implementation of the Tether WDK `IFiatProtocol`.
  *
  * Three distinct paths by design:
- *   - `buy`/`sell` build a request signing signed widget deep link via the consumer's
+ *   - `buy`/`sell` build a signed widget deep link via the consumer's
  *     `signUrl` callback — no backend call, no session.
  *   - `quote*` / `getSupported*` hit the existing public data endpoints with the
  *     publishable apiKey alone — no session.
- *   - `getTransactionDetail` reads the checkout session session transaction and is the
+ *   - `getTransactionDetail` reads the checkout session transaction and is the
  *     one call gated by a session token + DPoP envelope (requires
  *     `getSessionToken` in the config).
  *
@@ -105,21 +105,21 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     });
   }
 
-  /** Builds a request signing signed buy widget URL via `config.signUrl`. No backend call. */
+  /** Builds a signed buy widget URL via `config.signUrl`. No backend call. */
   async buy(options: BuyOptions): Promise<BuyResult> {
     return { buyUrl: await buildBuyUrl(this.config.signUrl, this.config.apiKey, options) };
   }
 
-  /** Builds a request signing signed sell widget URL via `config.signUrl`. No backend call. */
+  /** Builds a signed sell widget URL via `config.signUrl`. No backend call. */
   async sell(options: SellOptions): Promise<SellResult> {
     return { sellUrl: await buildSellUrl(this.config.signUrl, this.config.apiKey, options) };
   }
 
   /**
-   * Reads the checkout session session transaction detail. The only session-gated
+   * Reads the checkout session transaction detail. The only session-gated
    * call: requires `getSessionToken` in the config.
    *
-   * @param txId - The checkout session session id returned by the intent call.
+   * @param txId - The checkout session id returned by the intent call.
    * @throws {OnramperError} With code `OnramperErrorCode.INVALID_CONFIG` when the
    *   `getSessionToken` callback was not supplied in `OnramperFiatConfig`.
    */

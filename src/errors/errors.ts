@@ -35,7 +35,7 @@ interface OAuthErrorBody {
   error_description?: string;
 }
 
-/** Map a checkout/the API `{ errorCode, errorMessage }` body to an OnramperError. */
+/** Map an API `{ errorCode, errorMessage }` body to an OnramperError. */
 export function mapCheckoutError(httpStatus: number, body: unknown): OnramperError {
   const parsed = (body ?? {}) as CheckoutErrorBody;
   const code =

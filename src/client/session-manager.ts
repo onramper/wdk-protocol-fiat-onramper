@@ -6,7 +6,7 @@ import { buildDpopProof } from './dpop.ts';
 import type { Endpoints } from './endpoints.ts';
 import { newNonce, readDpopNonce } from './headers.ts';
 
-/** Refresh this many seconds before expiry, matching the iOS SDK's proactive skew. */
+/** Refresh this many seconds before expiry, a proactive refresh skew. */
 const PROACTIVE_REFRESH_SKEW_SEC = 60;
 
 interface TokenResponse {
@@ -26,10 +26,10 @@ interface SessionManagerDeps {
 }
 
 /**
- * Owns the SDK session lifecycle for the non-attested path: it mints a
- * DPoP key, bootstraps an access token from a backend-issued session token
- * (sending `attestation.type:'none'`), and refreshes it. Concurrent callers are
- * coalesced via a single in-flight promise so we never run two exchanges at once.
+ * Owns the SDK session lifecycle: it mints a DPoP key, bootstraps an access
+ * token from a backend-issued session token, and refreshes it. Concurrent
+ * callers are coalesced via a single in-flight promise so we never run two
+ * exchanges at once.
  */
 export class SessionManager {
   private key?: Es256KeyHandle;
@@ -38,8 +38,8 @@ export class SessionManager {
   private accessTokenExpSec = 0;
   private refreshToken?: string;
   /** Session id (`sid`) the partner backend issued alongside the session token.
-   *  the API's refresh grant requires it and never echoes it back, so it's
-   *  captured at bootstrap and resent on every refresh (mirrors the iOS SDK). */
+   *  The API's refresh grant requires it and never echoes it back, so it's
+   *  captured at bootstrap and resent on every refresh. */
   private sessionId?: string;
   private inFlight?: Promise<string>;
 
@@ -67,7 +67,7 @@ export class SessionManager {
     return this.key;
   }
 
-  /** The device fingerprint (resolved lazily, then cached). It hashes to the access token's `did` claim, so it must stay stable for the session. */
+  /** The device fingerprint (resolved lazily, then cached). It must stay stable for the session. */
   async getFingerprint(): Promise<string> {
     if (this.fingerprint === undefined) {
       this.fingerprint = await this.deps.adapters.fingerprint.get();
@@ -117,9 +117,9 @@ export class SessionManager {
   }
 
   private async bootstrap(): Promise<string> {
-    // getSessionToken is consumer-supplied (it makes the partner's request signing
-    // call), so any throw — fetch rejection, timeout — must still reach callers
-    // as the library's one error type, not a raw exception.
+    // getSessionToken is consumer-supplied (it calls the partner's backend), so
+    // any throw — fetch rejection, timeout — must still reach callers as the
+    // library's one error type, not a raw exception.
     let sessionId: string;
     let sessionToken: string;
     try {
@@ -131,9 +131,9 @@ export class SessionManager {
     }
     this.sessionId = sessionId;
     const fingerprint = await this.getFingerprint();
-    // The device fingerprint rides on the X-Onramper-Device HEADER;
-    // the API hard-rejects the exchange without it and its body schema has
-    // no device field, so a body-only fingerprint is silently dropped.
+    // The device fingerprint rides on the X-Onramper-Device HEADER; the API
+    // requires it there and ignores any body field, so a body-only fingerprint
+    // is silently dropped.
     const response = await this.tokenRequest(
       {
         grant_type: 'session_token',
@@ -153,8 +153,8 @@ export class SessionManager {
     if (!this.sessionId) {
       throw new OnramperError(OnramperErrorCode.INVALID_SDK_SESSION, 'No session id available for refresh');
     }
-    // the API's refresh grant requires session_id (the refresh schema) and
-    // resolves the session row by it; the refresh token alone is insufficient.
+    // The API's refresh grant requires session_id and resolves the session by it;
+    // the refresh token alone is insufficient.
     const response = await this.tokenRequest({
       grant_type: 'refresh_token',
       refresh_token: this.refreshToken,

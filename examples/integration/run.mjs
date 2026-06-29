@@ -6,15 +6,15 @@
 import { OnramperError, OnramperErrorCode, OnramperFiatProtocol } from '../../dist/index.node.js';
 
 const API_KEY = process.env.ONRAMPER_API_KEY;
-const ENV = process.env.ONRAMPER_ENV ?? 'staging';
+const ENV = process.env.ONRAMPER_ENV ?? 'production';
 if (!API_KEY) {
   console.error('Set ONRAMPER_API_KEY (a publishable pk_test_… / pk_prod_… key).');
   process.exit(2);
 }
 
 // A `signUrl` callback. In production this calls YOUR backend, which signs the
-// widget params with your request signing key. For the example we fall back to a
-// local echo so buy/sell still produce a URL without a backend.
+// widget params. For the example we fall back to a local echo so buy/sell
+// still produce a URL without a backend.
 const signUrl = process.env.ONRAMPER_SIGN_URL
   ? async (params) => {
       const r = await fetch(process.env.ONRAMPER_SIGN_URL, {
@@ -185,11 +185,11 @@ await scenario(
   },
 );
 
-group('Checkout / session — getTransactionDetail (bootstrap → DPoP envelope → checkout session)');
+group('Checkout / session — getTransactionDetail');
 if (!haveSession) {
   tally.SKIP++;
   console.log(
-    `  ${C.dim}SKIP        getTransactionDetail — set ONRAMPER_SESSION_ID + ONRAMPER_SESSION_TOKEN (session must be enabled on the partner; see README)${C.reset}`,
+    `  ${C.dim}SKIP        getTransactionDetail — set ONRAMPER_SESSION_ID + ONRAMPER_SESSION_TOKEN (see README)${C.reset}`,
   );
 } else {
   await scenario(
