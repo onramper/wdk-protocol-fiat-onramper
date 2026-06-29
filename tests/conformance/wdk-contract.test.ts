@@ -183,7 +183,6 @@ describe('IFiatProtocol contract', () => {
     // Pin the exact token URL: the DPoP htu is signed against it, so a routing
     // regression would silently break proof-of-possession.
     expect(tokenCall?.url).toContain('/partners/v2/pk_test_abc123/client-sessions/tokens');
-    expect(tokenCall?.url).not.toContain('/the API');
     expect(tokenCall?.headers['X-Onramper-Device']).toBeTruthy();
     expect(tokenCall?.headers['X-Onramper-Device']).toBe(txCall?.headers['X-Onramper-Device']);
     const bootstrapBody = JSON.parse(tokenCall?.body ?? '{}');

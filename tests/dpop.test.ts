@@ -16,7 +16,7 @@ describe('DPoP proof', () => {
 
     const proof = await buildDpopProof(crypto, key, {
       method: 'get',
-      url: 'https://api.stg.onramper.com/the API/v1/supported?foo=bar#frag',
+      url: 'https://api.stg.onramper.com/v1/supported?foo=bar#frag',
       accessToken: 'at_test',
     });
 
@@ -30,7 +30,7 @@ describe('DPoP proof', () => {
     expect((header.jwk as Record<string, unknown>).kty).toBe('EC');
     // htm uppercased, htu stripped of query + fragment.
     expect(payload.htm).toBe('GET');
-    expect(payload.htu).toBe('https://api.stg.onramper.com/the API/v1/supported');
+    expect(payload.htu).toBe('https://api.stg.onramper.com/v1/supported');
     expect(payload.jti).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     // ath = base64url(SHA-256('at_test')) — the access-token binding the server enforces.
     expect(payload.ath).toBe('o7NISW7rpXoPt8ttNdRBDEeIaMoETNyPA99WKYZLqXo');
