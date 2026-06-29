@@ -1,4 +1,5 @@
 import type { OnramperChannel } from '../types/onramper.ts';
+import { randomId } from '../utils/random.ts';
 
 /** Version reported in `X-Onramper-SDK-Version`. Server regex expects `<platform>-<semver>`. */
 export const SDK_VERSION = '0.1.0';
@@ -41,5 +42,10 @@ export function buildEnvelopeHeaders(input: EnvelopeInput): Record<string, strin
 
 /** Fresh per-request value for the `X-Onramper-Nonce` replay-protection header. */
 export function newNonce(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `nonce_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return randomId('nonce');
+}
+
+/** Case-insensitive read of the server's DPoP nonce challenge header. */
+export function readDpopNonce(headers: Record<string, string>): string | undefined {
+  return headers['dpop-nonce'] ?? headers['DPoP-Nonce'];
 }

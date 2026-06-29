@@ -1,4 +1,5 @@
 import type { FiatTransactionDetail, FiatTxStatus } from '../types/wdk.ts';
+import { toOptionalString } from '../utils/coerce.ts';
 
 /**
  * Shape from `GET /checkout/session/{sessionId}/transaction`: a `{valid,
@@ -48,13 +49,6 @@ function normaliseStatus(raw: string | undefined): FiatTxStatus {
   }
 }
 
-function str(value: number | string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return typeof value === 'number' ? String(value) : value;
-}
-
 /**
  * Maps a `GET /checkout/session/{sessionId}/transaction` envelope to a WDK
  * `FiatTransactionDetail`, normalising provider status and resolving field
@@ -67,8 +61,8 @@ export function toFiatTransactionDetail(raw: unknown): FiatTransactionDetail {
     status: normaliseStatus(tx.status),
     cryptoAsset: tx.cryptoAsset ?? tx.crypto ?? '',
     fiatCurrency: tx.fiatCurrency ?? tx.fiat ?? '',
-    fiatAmount: str(tx.fiatAmount),
-    cryptoAmount: str(tx.cryptoAmount),
+    fiatAmount: toOptionalString(tx.fiatAmount),
+    cryptoAmount: toOptionalString(tx.cryptoAmount),
     txHash: tx.txHash,
     provider: tx.provider ?? tx.ramp ?? tx.onramp,
   };

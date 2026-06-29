@@ -1,10 +1,10 @@
 import type { Adapters, Es256KeyHandle } from '../adapters/types.ts';
 import { mapOAuthError, OnramperError, OnramperErrorCode, REBOOTSTRAP_CODES } from '../errors/index.ts';
 import type { GetSessionToken, OnramperChannel } from '../types/onramper.ts';
-import { parseJsonBody } from '../utils/json.ts';
+import { parseJsonBody, safeJsonBody } from '../utils/json.ts';
 import { buildDpopProof } from './dpop.ts';
 import type { Endpoints } from './endpoints.ts';
-import { newNonce } from './headers.ts';
+import { newNonce, readDpopNonce } from './headers.ts';
 
 /** Refresh this many seconds before expiry, matching the iOS SDK's proactive skew. */
 const PROACTIVE_REFRESH_SKEW_SEC = 60;
@@ -207,21 +207,13 @@ export class SessionManager {
       return parseJsonBody<TokenResponse>(res.body);
     }
 
-    const parsed = safeJson(res.body);
-    const serverNonce = res.headers['dpop-nonce'] ?? res.headers['DPoP-Nonce'];
+    const parsed = safeJsonBody(res.body);
+    const serverNonce = readDpopNonce(res.headers);
     const isNonceChallenge =
       (parsed as { error?: string } | undefined)?.error === 'use_dpop_nonce' && serverNonce && !dpopNonce;
     if (isNonceChallenge) {
       return this.tokenRequest(body, extraHeaders, serverNonce);
     }
     throw mapOAuthError(res.status, parsed);
-  }
-}
-
-function safeJson(body: string): unknown {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return undefined;
   }
 }

@@ -1,3 +1,4 @@
+import { randomId } from '../../utils/random.ts';
 import type { FingerprintAdapter, StorageAdapter } from '../types.ts';
 
 const FINGERPRINT_KEY = 'onramper.wdk.fingerprint';
@@ -15,8 +16,7 @@ export function createPersistedFingerprintAdapter(storage: StorageAdapter): Fing
       if (existing) {
         return existing;
       }
-      const id =
-        globalThis.crypto?.randomUUID?.() ?? `fp_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+      const id = randomId('fp');
       await storage.set(FINGERPRINT_KEY, id);
       return id;
     },

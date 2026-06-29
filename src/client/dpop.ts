@@ -1,5 +1,6 @@
 import type { CryptoAdapter, Es256KeyHandle } from '../adapters/types.ts';
 import { bytesToBase64Url, jsonToBase64Url } from '../utils/base64url.ts';
+import { randomId } from '../utils/random.ts';
 
 /** The minimal EC public JWK carried in a DPoP header (RFC 9449 / RFC 7517). */
 interface EcPublicJwk {
@@ -57,7 +58,7 @@ export async function buildDpopProof(
   const header = { typ: 'dpop+jwt', alg: 'ES256', jwk };
 
   const payload: Record<string, unknown> = {
-    jti: crypto64Jti(),
+    jti: randomId('jti'),
     htm: input.method.toUpperCase(),
     htu: stripUrl(input.url),
     iat: Math.floor(Date.now() / 1000),
@@ -81,8 +82,4 @@ function stripUrl(url: string): string {
   const noHash = hashIndex === -1 ? url : url.slice(0, hashIndex);
   const queryIndex = noHash.indexOf('?');
   return queryIndex === -1 ? noHash : noHash.slice(0, queryIndex);
-}
-
-function crypto64Jti(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `jti_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }

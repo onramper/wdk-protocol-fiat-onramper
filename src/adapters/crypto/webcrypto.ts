@@ -34,13 +34,13 @@ export function createWebCryptoAdapter(): CryptoAdapter {
       const sig = await getSubtle().sign(
         { name: 'ECDSA', hash: 'SHA-256' },
         handle.privateKey as CryptoKey,
-        data as unknown as BufferSource,
+        data as BufferSource,
       );
       return new Uint8Array(sig);
     },
 
     async sha256(data: Uint8Array): Promise<Uint8Array> {
-      const digest = await getSubtle().digest('SHA-256', data as unknown as BufferSource);
+      const digest = await getSubtle().digest('SHA-256', data as BufferSource);
       return new Uint8Array(digest);
     },
   };

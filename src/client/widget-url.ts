@@ -1,5 +1,6 @@
 import type { SignUrl, SignUrlParams } from '../types/onramper.ts';
 import type { BuyOptions, SellOptions } from '../types/wdk.ts';
+import { toOptionalString } from '../utils/coerce.ts';
 
 /**
  * buy()/sell() are pure signed-URL builders — no backend call, no session. We
@@ -7,13 +8,6 @@ import type { BuyOptions, SellOptions } from '../types/wdk.ts';
  * whose backend produces the request signing signed widget URL. This mirrors the
  * MoonPay WDK protocol: partners already create signed URLs of ours.
  */
-
-function toAmountString(value: number | string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return typeof value === 'number' ? String(value) : value;
-}
 
 /**
  * Builds the signed buy widget URL via the consumer's `signUrl` callback,
@@ -27,7 +21,7 @@ export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, options: Buy
     fiatCurrency: options.fiatCurrency,
     cryptoAsset: options.cryptoAsset,
     networkCode: options.networkCode,
-    fiatAmount: toAmountString(options.fiatAmount),
+    fiatAmount: toOptionalString(options.fiatAmount),
     address: options.recipient,
     memo: options.memo,
     paymentMethod: options.paymentMethod,
@@ -49,7 +43,7 @@ export async function buildSellUrl(signUrl: SignUrl, apiKey: string, options: Se
     fiatCurrency: options.fiatCurrency,
     cryptoAsset: options.cryptoAsset,
     networkCode: options.networkCode,
-    cryptoAmount: toAmountString(options.cryptoAmount),
+    cryptoAmount: toOptionalString(options.cryptoAmount),
     address: options.refundAddress,
     memo: options.memo,
     paymentMethod: options.paymentMethod,

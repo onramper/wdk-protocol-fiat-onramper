@@ -1,9 +1,9 @@
 import type { Adapters } from '../adapters/types.ts';
 import { mapCheckoutError, OnramperErrorCode } from '../errors/index.ts';
 import type { OnramperChannel } from '../types/onramper.ts';
-import { parseJsonBody } from '../utils/json.ts';
+import { parseJsonBody, safeJsonBody } from '../utils/json.ts';
 import { buildDpopProof } from './dpop.ts';
-import { buildEnvelopeHeaders, newNonce } from './headers.ts';
+import { buildEnvelopeHeaders, newNonce, readDpopNonce } from './headers.ts';
 import type { SessionManager } from './session-manager.ts';
 
 interface AuthorizedClientDeps {
@@ -34,7 +34,7 @@ export class AuthorizedClient {
     if (res.status >= 200 && res.status < 300) {
       return parseJsonBody<T>(res.body);
     }
-    throw mapCheckoutError(res.status, safeJson(res.body));
+    throw mapCheckoutError(res.status, safeJsonBody(res.body));
   }
 
   /** @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`) after the session-refresh and DPoP-nonce retries are exhausted. */
@@ -69,10 +69,10 @@ export class AuthorizedClient {
         return parseJsonBody<T>(res.body);
       }
 
-      const parsed = safeJson(res.body);
+      const parsed = safeJsonBody(res.body);
 
       // DPoP nonce challenge: retry once echoing the server-provided nonce.
-      const serverNonce = res.headers['dpop-nonce'] ?? res.headers['DPoP-Nonce'];
+      const serverNonce = readDpopNonce(res.headers);
       if (serverNonce && !dpopNonce) {
         dpopNonce = serverNonce;
         continue;
@@ -87,13 +87,5 @@ export class AuthorizedClient {
       }
       throw error;
     }
-  }
-}
-
-function safeJson(body: string): unknown {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return undefined;
   }
 }

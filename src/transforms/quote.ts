@@ -1,5 +1,6 @@
 import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
 import type { FiatDirection, FiatQuote } from '../types/wdk.ts';
+import { toOptionalString } from '../utils/coerce.ts';
 
 /**
  * Shape of a single quote entry from the quotes endpoint. NOTE: the precise wire
@@ -16,13 +17,6 @@ interface RawQuote {
   payout?: number | string;
   paymentMethod?: string;
   errors?: unknown[];
-}
-
-function str(value: number | string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return typeof value === 'number' ? String(value) : value;
 }
 
 /**
@@ -43,11 +37,8 @@ export function toFiatQuote(
     cryptoAmount?: string;
   },
 ): FiatQuote {
-  const list: RawQuote[] = Array.isArray(raw)
-    ? raw
-    : Array.isArray((raw as { quotes?: RawQuote[] })?.quotes)
-      ? (raw as { quotes: RawQuote[] }).quotes
-      : [];
+  const quotes = (raw as { quotes?: unknown })?.quotes;
+  const list: RawQuote[] = Array.isArray(raw) ? raw : Array.isArray(quotes) ? (quotes as RawQuote[]) : [];
   // Require a priced entry, not just an error-free one: a rate-less item maps to
   // a quote with a blank `rate` (the same silent-empty trap the countries
   // transform fell into), so treat it as no-quote.
@@ -56,16 +47,16 @@ export function toFiatQuote(
     throw new OnramperError(OnramperErrorCode.QUOTE_UNAVAILABLE, 'No quote available for the requested pair');
   }
 
-  const payout = str(best.payout);
+  const payout = toOptionalString(best.payout);
   return {
     direction: context.direction,
     fiatCurrency: context.fiatCurrency,
     cryptoAsset: context.cryptoAsset,
     fiatAmount: context.fiatAmount ?? (context.direction === 'buy' ? '' : (payout ?? '')),
     cryptoAmount: context.cryptoAmount ?? (context.direction === 'buy' ? (payout ?? '') : ''),
-    rate: str(best.rate) ?? '',
-    networkFee: str(best.networkFee),
-    transactionFee: str(best.transactionFee),
+    rate: toOptionalString(best.rate) ?? '',
+    networkFee: toOptionalString(best.networkFee),
+    transactionFee: toOptionalString(best.transactionFee),
     paymentMethod: best.paymentMethod,
     provider: best.ramp,
     quoteId: best.quoteId,

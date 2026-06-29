@@ -27,7 +27,7 @@ export function base64UrlToBytes(value: string): Uint8Array {
 }
 
 /** Encodes a UTF-8 string as an unpadded base64url string. */
-export function utf8ToBase64Url(value: string): string {
+function utf8ToBase64Url(value: string): string {
   return bytesToBase64Url(encoder.encode(value));
 }
 

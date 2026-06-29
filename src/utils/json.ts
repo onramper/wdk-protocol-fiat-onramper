@@ -19,3 +19,12 @@ export function parseJsonBody<T>(body: string): T {
     throw new OnramperError(OnramperErrorCode.DECODE_ERROR, 'Failed to decode response body', { cause });
   }
 }
+
+/** Best-effort parse of an error body (parsed for error mapping), `undefined` when it isn't JSON. */
+export function safeJsonBody(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+}

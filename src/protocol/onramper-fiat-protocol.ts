@@ -48,7 +48,6 @@ export class OnramperFiatProtocol implements IFiatProtocol {
   private readonly client: AuthorizedClient;
   private readonly supportedCache: TtlCache<unknown>;
   private readonly countriesCache: TtlCache<unknown>;
-  private readonly hasSessionTokenProvider: boolean;
 
   constructor(account: WdkAccount | undefined, config: OnramperFiatConfig) {
     this.config = validateConfig(config);
@@ -62,7 +61,6 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     const apiBaseUrl = config.baseUrl ?? urls.apiBaseUrl;
 
     this.endpoints = new Endpoints(apiBaseUrl);
-    this.hasSessionTokenProvider = typeof config.getSessionToken === 'function';
     const session = new SessionManager({
       adapters,
       endpoints: this.endpoints,
@@ -126,7 +124,7 @@ export class OnramperFiatProtocol implements IFiatProtocol {
    *   `getSessionToken` callback was not supplied in `OnramperFiatConfig`.
    */
   async getTransactionDetail(txId: string, _direction?: FiatDirection): Promise<FiatTransactionDetail> {
-    if (!this.hasSessionTokenProvider) {
+    if (typeof this.config.getSessionToken !== 'function') {
       throw new OnramperError(
         OnramperErrorCode.INVALID_CONFIG,
         'getTransactionDetail requires the getSessionToken callback in OnramperFiatConfig',
@@ -148,22 +146,21 @@ export class OnramperFiatProtocol implements IFiatProtocol {
 
   /** Public data endpoint; the country list is TTL-cached separately from the supported-assets payload. */
   async getSupportedCountries(): Promise<SupportedCountry[]> {
-    const cached = this.countriesCache.get();
-    if (cached !== undefined) {
-      return toSupportedCountries(cached);
-    }
-    const raw = await this.client.getWithApiKey<unknown>(this.endpoints.supportedCountries());
-    this.countriesCache.set(raw);
-    return toSupportedCountries(raw);
+    return toSupportedCountries(await this.cached(this.countriesCache, this.endpoints.supportedCountries()));
   }
 
-  private async fetchSupported(): Promise<unknown> {
-    const cached = this.supportedCache.get();
-    if (cached !== undefined) {
-      return cached;
+  private fetchSupported(): Promise<unknown> {
+    return this.cached(this.supportedCache, this.endpoints.supported());
+  }
+
+  /** Read-through TTL cache over an apiKey-authenticated GET. */
+  private async cached(cache: TtlCache<unknown>, url: string): Promise<unknown> {
+    const hit = cache.get();
+    if (hit !== undefined) {
+      return hit;
     }
-    const raw = await this.client.getWithApiKey<unknown>(this.endpoints.supported());
-    this.supportedCache.set(raw);
+    const raw = await this.client.getWithApiKey<unknown>(url);
+    cache.set(raw);
     return raw;
   }
 
