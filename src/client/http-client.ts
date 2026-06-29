@@ -24,6 +24,7 @@ interface AuthorizedClientDeps {
 export class AuthorizedClient {
   constructor(private readonly deps: AuthorizedClientDeps) {}
 
+  /** @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`). */
   async getWithApiKey<T>(url: string): Promise<T> {
     const res = await this.deps.adapters.http.request({
       method: 'GET',
@@ -36,6 +37,7 @@ export class AuthorizedClient {
     throw mapCheckoutError(res.status, safeJson(res.body));
   }
 
+  /** @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`) after the session-refresh and DPoP-nonce retries are exhausted. */
   async getWithSession<T>(url: string): Promise<T> {
     let allowSessionRetry = true;
     let dpopNonce: string | undefined;

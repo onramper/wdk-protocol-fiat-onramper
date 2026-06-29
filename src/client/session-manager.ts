@@ -67,6 +67,7 @@ export class SessionManager {
     return this.key;
   }
 
+  /** The device fingerprint (resolved lazily, then cached). It hashes to the access token's `did` claim, so it must stay stable for the session. */
   async getFingerprint(): Promise<string> {
     if (this.fingerprint === undefined) {
       this.fingerprint = await this.deps.adapters.fingerprint.get();

@@ -38,7 +38,12 @@ export const CHECKOUT_ERROR_CODES: Readonly<Record<number, OnramperErrorCode>> =
   40304: OnramperErrorCode.INVALID_ATTESTATION,
 };
 
-/** RFC 6749 / DPoP string codes from token endpoints → normalised code. */
+/**
+ * RFC 6749 / DPoP string codes from token endpoints → normalised code.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc6749#section-5.2
+ * @see https://www.rfc-editor.org/rfc/rfc9449 (DPoP: invalid_dpop_proof, use_dpop_nonce)
+ */
 export const OAUTH_ERROR_CODES: Readonly<Record<string, OnramperErrorCode>> = {
   invalid_grant: OnramperErrorCode.INVALID_GRANT,
   invalid_dpop_proof: OnramperErrorCode.DPOP_REJECTED,

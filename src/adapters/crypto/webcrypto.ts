@@ -1,5 +1,13 @@
 import type { CryptoAdapter, Es256KeyHandle } from '../types.ts';
 
+function getSubtle(): SubtleCrypto {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error('WebCrypto SubtleCrypto is unavailable in this runtime');
+  }
+  return subtle;
+}
+
 /**
  * WebCrypto-backed crypto adapter, shared by the web and Node defaults (Node 20+
  * exposes the same `globalThis.crypto.subtle`).
@@ -10,15 +18,6 @@ import type { CryptoAdapter, Es256KeyHandle } from '../types.ts';
  * key that XSS cannot export, while still letting us export the public JWK for
  * the DPoP header. A stolen access token is then useless without this key.
  */
-
-function getSubtle(): SubtleCrypto {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) {
-    throw new Error('WebCrypto SubtleCrypto is unavailable in this runtime');
-  }
-  return subtle;
-}
-
 export function createWebCryptoAdapter(): CryptoAdapter {
   return {
     async generateEs256KeyPair(): Promise<Es256KeyHandle> {

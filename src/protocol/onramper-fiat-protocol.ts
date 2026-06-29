@@ -38,6 +38,9 @@ import { TtlCache } from '../utils/cache.ts';
  *   - `getTransactionDetail` reads the checkout session session transaction and is the
  *     one call gated by a session token + DPoP envelope (requires
  *     `getSessionToken` in the config).
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc9449 (DPoP) for the session-token envelope
+ * @see {@link IFiatProtocol} for the WDK contract this implements
  */
 export class OnramperFiatProtocol implements IFiatProtocol {
   private readonly config: OnramperFiatConfig;
@@ -104,15 +107,24 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     });
   }
 
+  /** Builds a request signing signed buy widget URL via `config.signUrl`. No backend call. */
   async buy(options: BuyOptions): Promise<BuyResult> {
     return { buyUrl: await buildBuyUrl(this.config.signUrl, this.config.apiKey, options) };
   }
 
+  /** Builds a request signing signed sell widget URL via `config.signUrl`. No backend call. */
   async sell(options: SellOptions): Promise<SellResult> {
     return { sellUrl: await buildSellUrl(this.config.signUrl, this.config.apiKey, options) };
   }
 
-  /** `txId` is the checkout session session id returned by the intent call. */
+  /**
+   * Reads the checkout session session transaction detail. The only session-gated
+   * call: requires `getSessionToken` in the config.
+   *
+   * @param txId - The checkout session session id returned by the intent call.
+   * @throws {OnramperError} With code `OnramperErrorCode.INVALID_CONFIG` when the
+   *   `getSessionToken` callback was not supplied in `OnramperFiatConfig`.
+   */
   async getTransactionDetail(txId: string, _direction?: FiatDirection): Promise<FiatTransactionDetail> {
     if (!this.hasSessionTokenProvider) {
       throw new OnramperError(
@@ -124,14 +136,17 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     return toFiatTransactionDetail(raw);
   }
 
+  /** Public data endpoint; the `GET /supported` payload is TTL-cached and shared with `getSupportedFiatCurrencies`. */
   async getSupportedCryptoAssets(): Promise<SupportedCryptoAsset[]> {
     return toSupportedCryptoAssets(await this.fetchSupported());
   }
 
+  /** Public data endpoint; reuses the same TTL-cached `GET /supported` payload as `getSupportedCryptoAssets`. */
   async getSupportedFiatCurrencies(): Promise<SupportedFiatCurrency[]> {
     return toSupportedFiatCurrencies(await this.fetchSupported());
   }
 
+  /** Public data endpoint; the country list is TTL-cached separately from the supported-assets payload. */
   async getSupportedCountries(): Promise<SupportedCountry[]> {
     const cached = this.countriesCache.get();
     if (cached !== undefined) {
@@ -157,7 +172,7 @@ export class OnramperFiatProtocol implements IFiatProtocol {
     source: string,
     destination: string,
     amount: number | string,
-    options: { networkCode?: string; paymentMethod?: string; country?: string },
+    options: Pick<QuoteBuyOptions, 'networkCode' | 'paymentMethod' | 'country'>,
   ): Promise<unknown> {
     const url = new URL(this.endpoints.quote(source, destination));
     url.searchParams.set('type', type);

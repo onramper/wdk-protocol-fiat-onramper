@@ -14,6 +14,8 @@
  * The private key is intentionally non-serialisable: on web/Node it is a
  * non-extractable `CryptoKey`/`KeyObject` so it cannot be exfiltrated by XSS;
  * a future React Native adapter would hold it in JS memory (no Secure Enclave).
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc9449 (OAuth 2.0 DPoP)
  */
 export interface Es256KeyHandle {
   readonly privateKey: unknown;
@@ -42,19 +44,23 @@ export interface StorageAdapter {
   delete(key: string): Promise<void>;
 }
 
+/** One HTTP exchange as seen by the protocol layer; status interpretation is the caller's job. */
 export interface HttpResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
 }
 
+/** An outbound request the protocol layer hands to the HTTP adapter. */
 export interface HttpRequest {
+  /** HTTP verb, upper-case (e.g. 'GET', 'POST'). */
   method: string;
   url: string;
   headers: Record<string, string>;
   body?: string;
 }
 
+/** Transport seam: performs one request and resolves the raw response. */
 export interface HttpAdapter {
   request(req: HttpRequest): Promise<HttpResponse>;
 }
@@ -68,6 +74,7 @@ export interface FingerprintAdapter {
   get(): Promise<string>;
 }
 
+/** The resolved per-runtime adapter set the protocol/client layers consume. */
 export interface Adapters {
   crypto: CryptoAdapter;
   storage: StorageAdapter;

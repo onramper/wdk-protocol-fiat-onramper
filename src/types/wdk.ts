@@ -52,6 +52,7 @@ export interface FiatTransactionDetail {
   provider?: string;
 }
 
+/** One crypto asset Onramper can ramp, with its network and on-chain decimals. */
 export interface SupportedCryptoAsset {
   code: string;
   networkCode: string;
@@ -59,12 +60,14 @@ export interface SupportedCryptoAsset {
   name: string;
 }
 
+/** One fiat currency Onramper supports, with its minor-unit decimals. */
 export interface SupportedFiatCurrency {
   code: string;
   decimals: number;
   name: string;
 }
 
+/** One supported country with its buy/sell allow-flags. */
 export interface SupportedCountry {
   code: string;
   isBuyAllowed: boolean;
@@ -72,6 +75,7 @@ export interface SupportedCountry {
   name: string;
 }
 
+/** Quote inputs for a buy: spend `fiatAmount` of `fiatCurrency` to receive `cryptoAsset`. */
 export interface QuoteBuyOptions {
   fiatCurrency: string;
   cryptoAsset: string;
@@ -81,6 +85,7 @@ export interface QuoteBuyOptions {
   country?: string;
 }
 
+/** Quote inputs for a sell: sell `cryptoAmount` of `cryptoAsset` for `fiatCurrency`. */
 export interface QuoteSellOptions {
   fiatCurrency: string;
   cryptoAsset: string;
@@ -106,15 +111,30 @@ export interface SellOptions extends QuoteSellOptions {
 
 /**
  * The WDK fiat-protocol contract. `quoteBuy`/`quoteSell` omit the address field
- * (recipient/refundAddress) since a quote does not move funds.
+ * (recipient/refundAddress) since a quote does not move funds. Every method
+ * rejects with `OnramperError` (never a raw `Error`).
+ *
+ * @see https://github.com/tetherto/wdk-wallet `src/protocols/fiat-protocol.js`
  */
 export interface IFiatProtocol {
+  /** Prices a buy. @throws {OnramperError} `QUOTE_UNAVAILABLE` if no priced quote exists; `UPSTREAM_ERROR`/`DECODE_ERROR` from the quotes call. */
   quoteBuy(options: QuoteBuyOptions): Promise<FiatQuote>;
+  /** Builds the signed buy widget URL via `signUrl`. No backend call. */
   buy(options: BuyOptions): Promise<BuyResult>;
+  /** Prices a sell. @throws {OnramperError} `QUOTE_UNAVAILABLE` if no priced quote exists; `UPSTREAM_ERROR`/`DECODE_ERROR` from the quotes call. */
   quoteSell(options: QuoteSellOptions): Promise<FiatQuote>;
+  /** Builds the signed sell widget URL via `signUrl`. No backend call. */
   sell(options: SellOptions): Promise<SellResult>;
+  /**
+   * Resolves status/amounts for one ramp transaction via the checkout session session.
+   * @param direction - Disambiguates buy vs sell lookups; inferred when omitted.
+   * @throws {OnramperError} `INVALID_CONFIG` when `getSessionToken` is not configured; `UPSTREAM_ERROR`/`DECODE_ERROR` from the session call.
+   */
   getTransactionDetail(txId: string, direction?: FiatDirection): Promise<FiatTransactionDetail>;
+  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
   getSupportedCryptoAssets(): Promise<SupportedCryptoAsset[]>;
+  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
   getSupportedFiatCurrencies(): Promise<SupportedFiatCurrency[]>;
+  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
   getSupportedCountries(): Promise<SupportedCountry[]>;
 }

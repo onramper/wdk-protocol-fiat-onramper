@@ -55,6 +55,11 @@ function str(value: number | string | undefined): string | undefined {
   return typeof value === 'number' ? String(value) : value;
 }
 
+/**
+ * Maps a `GET /checkout/session/{sessionId}/transaction` envelope to a WDK
+ * `FiatTransactionDetail`, normalising provider status and resolving field
+ * aliases (crypto/cryptoAsset, fiat/fiatCurrency, provider/ramp/onramp).
+ */
 export function toFiatTransactionDetail(raw: unknown): FiatTransactionDetail {
   const envelope = raw as { transactionInformation?: RawTransaction } | undefined;
   const tx = envelope?.transactionInformation ?? (raw as RawTransaction) ?? {};

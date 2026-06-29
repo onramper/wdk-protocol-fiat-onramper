@@ -14,6 +14,7 @@ export class NotImplementedError extends Error {
 /** Single error type surfaced to consumers, carrying the normalised code. */
 export class OnramperError extends Error {
   readonly code: OnramperErrorCode;
+  /** Upstream HTTP status when the error came from a response; absent for transport/decode failures (NETWORK_ERROR, DECODE_ERROR). */
   readonly httpStatus?: number;
 
   constructor(code: OnramperErrorCode, message: string, options?: { httpStatus?: number; cause?: unknown }) {

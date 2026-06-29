@@ -50,6 +50,11 @@ export type SignUrl = (params: SignUrlParams) => Promise<string>;
  */
 export type GetSessionToken = () => Promise<{ sessionId: string; sessionToken: string }>;
 
+/**
+ * Configuration for an Onramper fiat protocol instance: partner key, the
+ * consumer-supplied signing/session callbacks, and optional environment and
+ * platform-adapter overrides.
+ */
 export interface OnramperFiatConfig {
   /** Publishable partner API key (safe to ship in client code). */
   apiKey: string;
