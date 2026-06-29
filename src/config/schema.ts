@@ -19,6 +19,14 @@ const configSchema = z.object({
   adapters: z.object({}).passthrough().optional(),
 });
 
+/**
+ * Validates a consumer-supplied {@link OnramperFiatConfig} at construction so
+ * misconfiguration fails early rather than on the first network call. Returns
+ * the input unchanged on success (callback/adapter references are preserved).
+ *
+ * @throws {OnramperError} With code `OnramperErrorCode.INVALID_CONFIG` when a
+ *   field is missing or malformed; the message names the offending path.
+ */
 export function validateConfig(config: OnramperFiatConfig): OnramperFiatConfig {
   const result = configSchema.safeParse(config);
   if (!result.success) {

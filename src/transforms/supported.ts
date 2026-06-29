@@ -45,6 +45,7 @@ function unwrap(raw: unknown): unknown {
   return message !== undefined ? message : raw;
 }
 
+/** Maps the `crypto` block of a `GET /supported` payload to WDK crypto-asset descriptors; missing decimals default to 18. */
 export function toSupportedCryptoAssets(raw: unknown): SupportedCryptoAsset[] {
   const list = (unwrap(raw) as RawSupported)?.crypto ?? [];
   return list.map((c) => ({
@@ -55,6 +56,7 @@ export function toSupportedCryptoAssets(raw: unknown): SupportedCryptoAsset[] {
   }));
 }
 
+/** Maps the `fiat` block of a `GET /supported` payload to WDK fiat-currency descriptors; missing decimals default to 2. */
 export function toSupportedFiatCurrencies(raw: unknown): SupportedFiatCurrency[] {
   const list = (unwrap(raw) as RawSupported)?.fiat ?? [];
   return list.map((f) => ({
@@ -64,6 +66,7 @@ export function toSupportedFiatCurrencies(raw: unknown): SupportedFiatCurrency[]
   }));
 }
 
+/** Maps a `GET /supported/countries` payload to WDK country descriptors; list presence implies both buy and sell are allowed. */
 export function toSupportedCountries(raw: unknown): SupportedCountry[] {
   const unwrapped = unwrap(raw);
   const list: RawCountry[] = Array.isArray(unwrapped) ? unwrapped : [];

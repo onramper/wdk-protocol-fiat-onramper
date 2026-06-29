@@ -15,6 +15,11 @@ function toAmountString(value: number | string | undefined): string | undefined 
   return typeof value === 'number' ? String(value) : value;
 }
 
+/**
+ * Builds the signed buy widget URL via the consumer's `signUrl` callback,
+ * mapping `BuyOptions` to widget params (recipient → address). Returns the
+ * request signing signed widget URL.
+ */
 export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, options: BuyOptions): Promise<string> {
   const params: SignUrlParams = {
     direction: 'buy',
@@ -32,6 +37,11 @@ export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, options: Buy
   return signUrl(params);
 }
 
+/**
+ * Builds the signed sell widget URL via the consumer's `signUrl` callback,
+ * mapping `SellOptions` to widget params (refundAddress → address). Returns the
+ * request signing signed widget URL.
+ */
 export async function buildSellUrl(signUrl: SignUrl, apiKey: string, options: SellOptions): Promise<string> {
   const params: SignUrlParams = {
     direction: 'sell',

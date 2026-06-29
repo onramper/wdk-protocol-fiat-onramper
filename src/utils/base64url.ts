@@ -6,6 +6,7 @@
 
 const encoder = new TextEncoder();
 
+/** Encodes raw bytes as an unpadded base64url string (RFC 4648 §5 alphabet, trailing `=` stripped). */
 export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) {
@@ -14,6 +15,7 @@ export function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Decodes an unpadded (or padded) base64url string back to raw bytes; missing `=` padding is restored before decoding. */
 export function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='));
@@ -24,6 +26,7 @@ export function base64UrlToBytes(value: string): Uint8Array {
   return bytes;
 }
 
+/** Encodes a UTF-8 string as an unpadded base64url string. */
 export function utf8ToBase64Url(value: string): string {
   return bytesToBase64Url(encoder.encode(value));
 }

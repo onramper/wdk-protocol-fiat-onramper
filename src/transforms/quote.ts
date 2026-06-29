@@ -26,9 +26,12 @@ function str(value: number | string | undefined): string | undefined {
 }
 
 /**
- * Pick the best quote (first error-free entry) and map it to a `FiatQuote`.
- * `fiatAmount`/`cryptoAmount` are echoed from the request since the quote list
- * is keyed by the requested amount.
+ * Pick the best quote (the first error-free, priced entry) and map it to a
+ * `FiatQuote`. `fiatAmount`/`cryptoAmount` are echoed from the request since the
+ * quote list is keyed by the requested amount.
+ *
+ * @throws {OnramperError} With code `OnramperErrorCode.QUOTE_UNAVAILABLE` when no
+ *   priced, error-free quote exists for the requested pair.
  */
 export function toFiatQuote(
   raw: unknown,

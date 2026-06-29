@@ -39,6 +39,7 @@ export function buildEnvelopeHeaders(input: EnvelopeInput): Record<string, strin
   };
 }
 
+/** Fresh per-request value for the `X-Onramper-Nonce` replay-protection header. */
 export function newNonce(): string {
   return globalThis.crypto?.randomUUID?.() ?? `nonce_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 }

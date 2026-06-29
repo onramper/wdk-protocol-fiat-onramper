@@ -5,6 +5,12 @@ import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
  * non-JSON payload — a proxy/CDN interstitial returned with status 200, a
  * truncated transfer — so we surface the library's one error type
  * (`DECODE_ERROR`) instead of letting a raw `SyntaxError` escape the contract.
+ *
+ * `T` is an unchecked assertion: callers must validate the returned shape (e.g.
+ * with the corresponding zod schema) before trusting it.
+ *
+ * @throws {OnramperError} With code `OnramperErrorCode.DECODE_ERROR` when `body`
+ *   is not valid JSON.
  */
 export function parseJsonBody<T>(body: string): T {
   try {

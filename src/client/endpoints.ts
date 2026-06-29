@@ -24,18 +24,26 @@ export class Endpoints {
     return `${this.apiBaseUrl}/partners/v2/${encodeURIComponent(apiKey)}/client-sessions/tokens`;
   }
 
+  /** Public `GET /supported` route ({crypto, fiat} lists); apiKey-authenticated. */
   supported(): string {
     return `${this.apiBaseUrl}/supported`;
   }
 
+  /** Public `GET /supported/countries` route; apiKey-authenticated. */
   supportedCountries(): string {
     return `${this.apiBaseUrl}/supported/countries`;
   }
 
+  /**
+   * Public `GET /quotes/{source}/{destination}` route. `source`/`destination`
+   * are currency/asset codes; their order is direction-dependent and set by the
+   * protocol layer (fiat→crypto for buy, crypto→fiat for sell).
+   */
   quote(source: string, destination: string): string {
     return `${this.apiBaseUrl}/quotes/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
   }
 
+  /** Checkout v2 session transaction lookup; carries the SDK session envelope. */
   checkoutTransaction(sessionId: string): string {
     return `${this.apiBaseUrl}/checkout/session/${encodeURIComponent(sessionId)}/transaction`;
   }
