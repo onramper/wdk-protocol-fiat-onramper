@@ -6,8 +6,8 @@
  *   - supported/quotes are the existing public endpoints, authenticated by the
  *     publishable apiKey alone (`Authorization` header).
  *   - the checkout session-transaction lookup and the token exchange carry the
- *     SDK session envelope (access token + DPoP). Checkout v2 accepts that
- *     envelope as an alternative to the partner's request signing signature, so
+ *     SDK session envelope (access token + DPoP). The checkout session API accepts
+ *     that envelope as an alternative to the partner's request signature, so
  *     existing signature-authenticated integrations are unaffected.
  */
 export class Endpoints {
@@ -16,9 +16,9 @@ export class Endpoints {
   }
 
   /**
-   * Routes directly to the the API public session route. The client signs
-   * its DPoP `htu` against this exact URL, so the API must reconstruct the
-   * same origin + path to verify proof-of-possession (internal spec/internal spec contract).
+   * Builds the token-exchange URL. The client signs its DPoP `htu` against this
+   * exact URL, so the server must reconstruct the same origin + path to verify
+   * proof-of-possession.
    */
   tokens(apiKey: string): string {
     return `${this.apiBaseUrl}/partners/v2/${encodeURIComponent(apiKey)}/client-sessions/tokens`;
@@ -43,7 +43,7 @@ export class Endpoints {
     return `${this.apiBaseUrl}/quotes/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`;
   }
 
-  /** Checkout v2 session transaction lookup; carries the SDK session envelope. */
+  /** Checkout session transaction lookup; carries the SDK session envelope. */
   checkoutTransaction(sessionId: string): string {
     return `${this.apiBaseUrl}/checkout/session/${encodeURIComponent(sessionId)}/transaction`;
   }

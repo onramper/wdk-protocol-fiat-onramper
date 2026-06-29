@@ -23,8 +23,8 @@ const fiat = new OnramperFiatProtocol(undefined, {
     const r = await fetch('/onramper/sign-url', { method: 'POST', body: JSON.stringify(params) });
     return (await r.json()).url;
   },
-  // Optional — only needed for getTransactionDetail. Your backend mints a
-  // session token (the single request signing call).
+  // Optional — only needed for getTransactionDetail. Returns a session your
+  // backend created.
   getSessionToken: async () => {
     const r = await fetch('/onramper/session', { method: 'POST' });
     return r.json();                   // { sessionId, sessionToken }
@@ -39,45 +39,22 @@ const { buyUrl } = await fiat.buy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fia
 
 - **`buy()` / `sell()`** are pure signed-URL builders. They call your `signUrl`
   callback and return a hosted widget deep link. No backend call, no session.
-- **`quoteBuy` / `quoteSell` / `getSupported*`** hit the existing public data
-  endpoints (`/quotes/{source}/{destination}`, `/supported`,
-  `/supported/countries`) authenticated by the publishable apiKey alone — the
-  same contract every other Onramper client uses.
-- **`getTransactionDetail(sessionId)`** reads the checkout session session
-  transaction and is the one session-gated call: it bootstraps a non-attested
-  session from your backend-issued session token, mints a non-extractable ES256
-  DPoP key, and carries the SDK security envelope. Checkout v2 accepts that
-  envelope as an alternative to the partner's request signing request signature, so
-  existing signature-authenticated integrations are unaffected. `getSessionToken`
-  is optional for the other methods but required here; the session must carry the
-  `read` scope (the only session-gated call, `getTransactionDetail`, is a
-  read).
+- **`quoteBuy` / `quoteSell` / `getSupported*`** hit the public data endpoints
+  (`/quotes/{source}/{destination}`, `/supported`, `/supported/countries`)
+  authenticated by the publishable apiKey alone — the same contract every other
+  Onramper client uses.
+- **`getTransactionDetail(sessionId)`** reads a checkout session's transaction
+  detail. It is the one session-gated call: provide `getSessionToken` and the SDK
+  handles the session exchange and token lifecycle for you. The other methods
+  don't need it.
 
-### Session bootstrap contract (partner-mints-session)
+### Callbacks
 
-`getSessionToken` is a callback your backend implements. The SDK never holds your
-partner secret. The flow:
-
-1. Your server makes a single request signing-signed POST to the the API public
-   session-creation endpoint:
-   ```
-   POST /partners/v2/{apiKey}/client-sessions
-   ```
-   This returns `{ sessionId, sessionToken }`.
-2. Your server returns both values to the client via `getSessionToken()`.
-3. The SDK exchanges `sessionToken` for a short-lived access token (DPoP-bound)
-   by POSTing to the token endpoint `/partners/v2/{apiKey}/client-sessions/tokens`
-   — `htu` in the DPoP proof equals that full URL, binding proof-of-possession to
-   the correct origin and path.
-4. Refresh calls reuse the same endpoint, re-sending `session_id` alongside the
-   `refresh_token` (the API requires both for refresh grants).
-
-Token endpoint URLs by environment:
-
-| Environment | URL |
-|---|---|
-| production | `https://api.onramper.com/partners/v2/{apiKey}/client-sessions/tokens` |
-| staging / sandbox | `https://api-stg.onramper.com/partners/v2/{apiKey}/client-sessions/tokens` |
+- **`signUrl(params)`** — your backend signs the widget params and returns the
+  URL. The SDK never holds your signing secret.
+- **`getSessionToken()`** — your backend returns `{ sessionId, sessionToken }`
+  for a session it created. Called on first session-gated use and whenever the
+  SDK needs to refresh, so return a fresh value each call.
 
 ### Platform adapters
 

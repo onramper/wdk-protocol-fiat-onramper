@@ -127,7 +127,7 @@ export interface IFiatProtocol {
   /** Builds the signed sell widget URL via `signUrl`. No backend call. */
   sell(options: SellOptions): Promise<SellResult>;
   /**
-   * Resolves status/amounts for one ramp transaction via the checkout session session.
+   * Resolves status/amounts for one ramp transaction via the checkout session.
    * @param direction - Disambiguates buy vs sell lookups; inferred when omitted.
    * @throws {OnramperError} `INVALID_CONFIG` when `getSessionToken` is not configured; `UPSTREAM_ERROR`/`DECODE_ERROR` from the session call.
    */

@@ -5,15 +5,14 @@ export type OnramperEnvironment = 'production' | 'sandbox' | 'staging';
 
 /**
  * Client channel reported in `X-Onramper-Channel`. The WDK adapter uses the
- * `wdk-*` family (not `sdk-*`) so the server can tell WDK traffic apart from
- * our first-party SDKs. Must match a server-side the channel allowlist entry.
+ * `wdk-*` family.
  * React Native (`wdk-rn`) is out of scope for now — web and Node only.
  */
 export type OnramperChannel = 'wdk-web' | 'wdk-node';
 
 /**
  * Parameters handed to the consumer's `signUrl` callback for buy/sell. These are
- * the widget query params; the consumer's backend produces a request signing signed
+ * the widget query params; the consumer's backend produces a signed
  * widget URL from them (the signing key never reaches the client).
  */
 export interface SignUrlParams {
@@ -34,7 +33,7 @@ export interface SignUrlParams {
 }
 
 /**
- * Consumer-provided callback that returns a request signing signed widget URL.
+ * Consumer-provided callback that returns a signed widget URL.
  * Mirrors `@tetherto/wdk-protocol-fiat-moonpay`'s `signUrl`. Backed by the
  * partner's backend; the SDK never holds the signing secret.
  */
@@ -42,7 +41,7 @@ export type SignUrl = (params: SignUrlParams) => Promise<string>;
 
 /**
  * Consumer-provided callback that mints an SDK session token via the partner's
- * backend (the single request signing call). Returns the opaque `st_` token and its
+ * backend. Returns the opaque `st_` token and its
  * session id. Called on first session-gated use (`getTransactionDetail`) and
  * again whenever the SDK must re-bootstrap (e.g. after a terminal token error).
  * The token is single-use for binding, so a fresh one is needed each bootstrap —

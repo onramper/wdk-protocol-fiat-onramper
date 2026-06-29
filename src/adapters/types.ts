@@ -1,8 +1,7 @@
 /**
  * Platform abstraction seam. The protocol and client layers only ever touch
  * these four interfaces, never a platform API directly — this is what lets one
- * package run on web and Node. It mirrors the dependency-injection
- * seam the Swift SDK uses (client / token storage / attestation protocols).
+ * package run on web and Node.
  *
  * Each adapter has a per-platform default (see `src/adapters/index.ts`) and can
  * be overridden via `OnramperFiatConfig.adapters` — RN consumers inject their own
@@ -67,8 +66,7 @@ export interface HttpAdapter {
 
 /**
  * Produces a stable per-install device fingerprint. This is a soft signal (it is
- * spoofable), bound into the access token's `did` claim server-side and used as
- * one input to abuse heuristics — it is not a root of trust.
+ * spoofable), not a root of trust.
  */
 export interface FingerprintAdapter {
   get(): Promise<string>;

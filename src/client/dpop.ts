@@ -46,8 +46,7 @@ export interface DpopProofInput {
 
 /**
  * Build a DPoP proof JWS (compact ES256). Each call produces a fresh `jti` and
- * `iat`, so proofs are single-use and replay-checked server-side. Mirrors the
- * iOS SDK's `the proof builder`.
+ * `iat`, so proofs are single-use and replay-checked server-side.
  */
 export async function buildDpopProof(
   crypto: CryptoAdapter,
