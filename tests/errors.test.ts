@@ -75,5 +75,8 @@ describe('error mapping', () => {
     it('rejects a negative cacheTime', () => {
       expectInvalidConfig({ cacheTime: -1 }, /cacheTime/);
     });
+    it('rejects an array adapters value', () => {
+      expectInvalidConfig({ adapters: [] as unknown as OnramperFiatConfig['adapters'] }, /adapters/);
+    });
   });
 });

@@ -78,7 +78,10 @@ export function validateConfig(config: unknown): OnramperFiatConfig {
   if (c.channel !== undefined && !CHANNELS.has(c.channel)) {
     fail(`channel: must be one of 'wdk-web', 'wdk-node'`);
   }
-  if (c.adapters !== undefined && (typeof c.adapters !== 'object' || c.adapters === null)) {
+  if (
+    c.adapters !== undefined &&
+    (typeof c.adapters !== 'object' || c.adapters === null || Array.isArray(c.adapters))
+  ) {
     fail('adapters: expected an object');
   }
 

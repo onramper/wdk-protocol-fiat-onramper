@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { OnramperError, OnramperErrorCode } from '../src/errors.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { SignUrlParams } from '../src/types/onramper.ts';
-import { decodeProofHeader, decodeProofPayload, verifyProofSignature } from './dpop-helpers.ts';
+import { decodeProofHeader, decodeProofPayload, ecJwkThumbprint, verifyProofSignature } from './dpop-helpers.ts';
 import { baseConfig, json, mockHttp, supportedRoute, tokenRoute } from './helpers.ts';
 
 /** Raw (possibly non-JSON) response, for malformed-body tests. */
@@ -215,26 +215,44 @@ describe('token lifecycle', () => {
     const txCalls = http.calls.filter((c) => c.url.includes('/checkout/session/'));
     const mintProof = mintCall?.headers['X-Onramper-DPoP'] as string;
     const txProofs = txCalls.map((c) => c.headers['X-Onramper-DPoP'] as string);
+    const jtiPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-    for (const proof of [mintProof, ...txProofs]) {
+    for (const [i, proof] of [mintProof, ...txProofs].entries()) {
       const header = decodeProofHeader(proof);
+      const payload = decodeProofPayload(proof);
+      const call = [mintCall, ...txCalls][i];
       expect(header.typ).toBe('dpop+jwt');
       expect(header.alg).toBe('ES256');
       expect((header.jwk as { kty: string }).kty).toBe('EC');
       expect((header.jwk as { crv: string }).crv).toBe('P-256');
       await expect(verifyProofSignature(proof)).resolves.toBe(true);
+
+      // htm is the uppercased request method; htu is the request URL with no
+      // query/fragment — both must match the call the SDK actually issued.
+      expect(payload.htm).toBe(call?.method);
+      expect(payload.htu).toBe(call?.url);
+      expect(payload.jti).toMatch(jtiPattern);
+      const nowSec = Math.floor(Date.now() / 1000);
+      expect(payload.iat).toBeGreaterThanOrEqual(nowSec - 5);
+      expect(payload.iat).toBeLessThanOrEqual(nowSec + 1);
     }
 
     // The bootstrap mint has no access token yet; the session-gated calls do.
     expect(decodeProofPayload(mintProof).ath).toBeUndefined();
+    // ath = base64url(SHA-256(access_token)); 'at_test_token' is the fixed
+    // fixture token minted by tokenRoute, so this hash is a known constant.
     for (const proof of txProofs) {
-      expect(decodeProofPayload(proof).ath).toBeTruthy();
+      expect(decodeProofPayload(proof).ath).toBe('-mGyOiFTbLojM09saeg6_QOXFhzLaQ0UA7GFOYBxzGs');
     }
 
-    // Same DPoP key (cnf.jkt binding) reused across calls in one protocol instance.
-    const [first, second] = txProofs.map((p) => decodeProofHeader(p).jwk as { x: string; y: string });
-    expect(first?.x).toBe(second?.x);
-    expect(first?.y).toBe(second?.y);
+    // Same DPoP key (cnf.jkt binding) reused across calls in one protocol instance,
+    // verified by an independently computed RFC 7638 thumbprint, not just raw x/y equality.
+    const [first, second] = await Promise.all(
+      txProofs.map((p) =>
+        ecJwkThumbprint(decodeProofHeader(p).jwk as { crv: string; kty: string; x: string; y: string }),
+      ),
+    );
+    expect(first).toBe(second);
   });
 
   it('a raw network throw during the token exchange surfaces as OnramperError', async () => {
