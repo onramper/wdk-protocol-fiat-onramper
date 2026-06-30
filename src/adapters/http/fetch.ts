@@ -1,4 +1,4 @@
-import { OnramperError, OnramperErrorCode } from '../../errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../../errors.ts';
 import type { HttpAdapter, HttpRequest, HttpResponse } from '../types.ts';
 
 /**
@@ -6,10 +6,16 @@ import type { HttpAdapter, HttpRequest, HttpResponse } from '../types.ts';
  * so this is the default everywhere. Network-level failures map to NETWORK_ERROR;
  * HTTP status interpretation is left to callers (they know which wire format the
  * endpoint speaks).
+ *
+ * @throws {OnramperError} `INVALID_CONFIG` when no global `fetch` exists and
+ *   no override was supplied via `config.adapters.http`.
  */
 export function createFetchHttpAdapter(fetchImpl: typeof fetch = globalThis.fetch): HttpAdapter {
   if (typeof fetchImpl !== 'function') {
-    throw new Error('No global fetch available; provide an http adapter or a fetch implementation');
+    throw new OnramperError(
+      OnramperErrorCode.INVALID_CONFIG,
+      'No global fetch available; provide an http adapter or a fetch implementation',
+    );
   }
   return {
     async request(req: HttpRequest): Promise<HttpResponse> {

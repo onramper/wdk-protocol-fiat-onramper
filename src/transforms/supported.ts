@@ -90,7 +90,7 @@ export function findSupportedPair(
   raw: unknown,
   cryptoCode: string,
   fiatCode: string,
-): { crypto?: { decimals?: number }; fiat?: { decimals?: number } } {
+): { crypto?: Pick<RawCrypto, 'decimals'>; fiat?: Pick<RawFiat, 'decimals'> } {
   const supported = (unwrap(raw) as RawSupported) ?? {};
   const crypto = (supported.crypto ?? []).find((c) => (c.code ?? c.id) === cryptoCode);
   const fiat = (supported.fiat ?? []).find((f) => (f.code ?? f.id) === fiatCode);

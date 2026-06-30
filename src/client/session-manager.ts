@@ -1,7 +1,7 @@
 import type { Adapters, Es256KeyHandle } from '../adapters/types.ts';
-import { mapOAuthError, OnramperError, OnramperErrorCode, REBOOTSTRAP_CODES } from '../errors/index.ts';
+import { mapOAuthError, OnramperError, OnramperErrorCode, REBOOTSTRAP_CODES } from '../errors.ts';
 import type { GetSessionToken, OnramperChannel } from '../types/onramper.ts';
-import { parseJsonBody, safeJsonBody } from '../utils/json.ts';
+import { parseJsonBody, safeJsonBody } from '../utils/format.ts';
 import { buildDpopProof } from './dpop.ts';
 import type { Endpoints } from './endpoints.ts';
 import { newNonce, readDpopNonce } from './headers.ts';

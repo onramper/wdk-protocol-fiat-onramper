@@ -1,5 +1,5 @@
 import type { OnramperChannel } from '../types/onramper.ts';
-import { randomId } from '../utils/random.ts';
+import { randomId } from '../utils/format.ts';
 
 /** Version reported in `X-Onramper-SDK-Version`. Server regex expects `<platform>-<semver>`. */
 export const SDK_VERSION = '0.1.0';

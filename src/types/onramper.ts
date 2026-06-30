@@ -1,6 +1,6 @@
 import type { Adapters } from '../adapters/types.ts';
 
-/** Onramper deployment the SDK talks to. Picks the base URLs (see config/defaults). */
+/** Onramper deployment the SDK talks to. Picks the base URLs (see config.ts). */
 export type OnramperEnvironment = 'production' | 'sandbox' | 'staging';
 
 /**

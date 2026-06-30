@@ -1,7 +1,7 @@
 import type { Adapters } from '../adapters/types.ts';
-import { mapCheckoutError, OnramperErrorCode } from '../errors/index.ts';
+import { mapCheckoutError, OnramperErrorCode } from '../errors.ts';
 import type { OnramperChannel } from '../types/onramper.ts';
-import { parseJsonBody, safeJsonBody } from '../utils/json.ts';
+import { parseJsonBody, safeJsonBody } from '../utils/format.ts';
 import { buildDpopProof } from './dpop.ts';
 import { buildEnvelopeHeaders, newNonce, readDpopNonce } from './headers.ts';
 import type { SessionManager } from './session-manager.ts';

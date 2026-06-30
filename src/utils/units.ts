@@ -1,5 +1,5 @@
 import BigNumber from 'bignumber.js';
-import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../errors.ts';
 
 /**
  * Convert a provider's decimal amount (e.g. `"1.5"` ETH) to a base-unit integer
@@ -45,7 +45,7 @@ export function toDecimalString(baseUnits: bigint | number | string, decimals: n
  * total to a base-unit integer at `decimals`. Missing or non-finite entries
  * count as zero so a partial fee payload never throws. Truncates toward zero.
  */
-export function sumToBaseUnits(decimalAmounts: Array<number | string | undefined>, decimals: number): bigint {
+export function sumToBaseUnits(decimalAmounts: (number | string | undefined)[], decimals: number): bigint {
   const total = decimalAmounts.reduce<BigNumber>((acc, value) => {
     const n = new BigNumber(value ?? 0);
     return acc.plus(n.isFinite() ? n : 0);

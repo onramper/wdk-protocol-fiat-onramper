@@ -1,10 +1,15 @@
 /**
  * Canonical WDK fiat-protocol contract, re-exported verbatim from
- * `@tetherto/wdk-wallet`, plus Onramper's provider-specific extensions layered
- * on top via the `config` (input) / `metadata` (output) pattern that
- * `@tetherto/wdk-protocol-fiat-moonpay` uses. The base shapes are the source of
- * truth — never redeclared here, so they cannot drift from the contract a WDK
- * wallet relies on.
+ * `@tetherto/wdk-wallet`. The base shapes are the source of truth — never
+ * redeclared here, so they cannot drift from the contract a WDK wallet relies
+ * on.
+ *
+ * Quotes and transactions layer Onramper's provider-specific data on top via
+ * the `config` (input) / `metadata` (output) pattern `@tetherto/wdk-protocol-fiat-moonpay`
+ * uses. The supported-list calls (`getSupportedCryptoAssets`,
+ * `getSupportedFiatCurrencies`, `getSupportedCountries`) don't follow that
+ * pattern — they return the bare WDK shapes unmodified, since the `/supported`
+ * API carries no Onramper-specific data worth attaching.
  */
 
 export type {
@@ -21,7 +26,16 @@ export type {
   SupportedFiatCurrency,
 } from '@tetherto/wdk-wallet/protocols';
 
-import type { BuyOptions, FiatQuote, FiatTransactionDetail, SellOptions } from '@tetherto/wdk-wallet/protocols';
+import type {
+  BuyCommonOptions,
+  BuyOptions,
+  BuyWithFiatAmountOptions,
+  FiatQuote,
+  FiatTransactionDetail,
+  SellCommonOptions,
+  SellExactCryptoAmountOptions,
+  SellOptions,
+} from '@tetherto/wdk-wallet/protocols';
 
 /** Internal buy/sell discriminator. Not part of the WDK surface. */
 export type FiatDirection = 'buy' | 'sell';
@@ -46,8 +60,20 @@ export interface OnramperRequestConfig {
 
 export type OnramperBuyOptions = BuyOptions & { config?: OnramperRequestConfig };
 export type OnramperSellOptions = SellOptions & { config?: OnramperRequestConfig };
-export type OnramperQuoteBuyOptions = Omit<BuyOptions, 'recipient'> & { config?: OnramperRequestConfig };
-export type OnramperQuoteSellOptions = Omit<SellOptions, 'refundAddress'> & { config?: OnramperRequestConfig };
+
+/**
+ * Onramper prices a buy by an exact fiat spend only — narrower than the WDK
+ * `Omit<BuyOptions, 'recipient'>` XOR, which also allows an exact crypto target.
+ */
+export type OnramperQuoteBuyOptions = Omit<BuyCommonOptions, 'recipient'> &
+  BuyWithFiatAmountOptions & { config?: OnramperRequestConfig };
+
+/**
+ * Onramper prices a sell by an exact crypto amount only — narrower than the WDK
+ * `Omit<SellOptions, 'refundAddress'>` XOR, which also allows an exact fiat target.
+ */
+export type OnramperQuoteSellOptions = Omit<SellCommonOptions, 'refundAddress'> &
+  SellExactCryptoAmountOptions & { config?: OnramperRequestConfig };
 
 /**
  * Raw Onramper quote data surfaced under `FiatQuote.metadata` for callers that

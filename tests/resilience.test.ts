@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { OnramperErrorCode } from '../src/errors/codes.ts';
-import { OnramperError } from '../src/errors/errors.ts';
+import { OnramperError, OnramperErrorCode } from '../src/errors.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { SignUrlParams } from '../src/types/onramper.ts';
-import { decodeProofPayload } from './dpop-helpers.ts';
+import { decodeProofHeader, decodeProofPayload, verifyProofSignature } from './dpop-helpers.ts';
 import { baseConfig, json, mockHttp, supportedRoute, tokenRoute } from './helpers.ts';
 
 /** Raw (possibly non-JSON) response, for malformed-body tests. */
@@ -14,27 +13,32 @@ const txOk = {
     json(200, { valid: true, transactionInformation: { transactionId: 'tx_1', status: 'pending', onramp: 'p-a' } }),
 };
 const proto = (over = {}) => new OnramperFiatProtocol(undefined, baseConfig(over));
+/** A copy-paste bug setting the wrong message on the right code must fail a test — assert both. */
+const reject = (code: OnramperErrorCode, messageMatch: RegExp) => ({
+  code,
+  message: expect.stringMatching(messageMatch),
+});
 
 describe('decode errors — a 2xx body that is not JSON surfaces DECODE_ERROR, never a raw SyntaxError', () => {
   it('getWithApiKey (supported) on a malformed 200 body', async () => {
     const http = mockHttp([{ match: '/supported', handler: () => raw(200, '<html>gateway</html>') }]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getSupportedCryptoAssets(),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.DECODE_ERROR });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /Failed to decode response body/));
   });
 
   it('getWithSession (transaction) on a malformed 200 body', async () => {
     const http = mockHttp([tokenRoute, { match: '/checkout/session/', handler: () => raw(200, 'not json {') }]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.DECODE_ERROR });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /Failed to decode response body/));
   });
 
   it('token exchange on a malformed 200 body', async () => {
     const http = mockHttp([{ match: 'client-sessions/tokens', handler: () => raw(200, '{truncated') }, txOk]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.DECODE_ERROR });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /Failed to decode response body/));
   });
 });
 
@@ -43,7 +47,10 @@ describe('HTTP error mapping — every failure surfaces a typed OnramperError', 
     const http = mockHttp([{ match: '/supported', handler: () => raw(500, '') }]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getSupportedFiatCurrencies(),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR, httpStatus: 500 });
+    ).rejects.toMatchObject({
+      ...reject(OnramperErrorCode.UPSTREAM_ERROR, /Request failed with status 500/),
+      httpStatus: 500,
+    });
   });
 
   it('quotes 503 → upstream_error', async () => {
@@ -54,7 +61,7 @@ describe('HTTP error mapping — every failure surfaces a typed OnramperError', 
         cryptoAsset: 'btc',
         fiatAmount: 100_00n,
       }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.UPSTREAM_ERROR, /Request failed with status 503/));
   });
 
   it('transaction 401 INVALID_SDK_SESSION → refresh once, then the retried call succeeds', async () => {
@@ -101,7 +108,7 @@ describe('HTTP error mapping — every failure surfaces a typed OnramperError', 
     ]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.INVALID_SDK_SESSION });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.INVALID_SDK_SESSION, /expired/));
     expect(txCalls).toBe(2); // initial + one refresh retry, then stop
   });
 });
@@ -124,6 +131,7 @@ describe('session bootstrap — getSessionToken callback failures stay typed', (
     } catch (e) {
       expect(e).toBeInstanceOf(OnramperError);
       expect((e as OnramperError).code).toBe(OnramperErrorCode.UPSTREAM_ERROR);
+      expect((e as OnramperError).message).toMatch(/getSessionToken callback failed/);
       expect((e as OnramperError).cause).toBe(cause);
     }
   });
@@ -197,6 +205,38 @@ describe('token lifecycle', () => {
     expect(decodeProofPayload(second.headers['X-Onramper-DPoP'] as string).nonce).toBe('srv-nonce-xyz');
   });
 
+  it('DPoP proofs are well-formed ES256 JWS, bind ath only once an access token exists, and reuse one key per session', async () => {
+    const http = mockHttp([tokenRoute, txOk]);
+    const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
+    await p.getTransactionDetail('s1');
+    await p.getTransactionDetail('s2');
+
+    const mintCall = http.calls.find((c) => c.url.includes('client-sessions/tokens'));
+    const txCalls = http.calls.filter((c) => c.url.includes('/checkout/session/'));
+    const mintProof = mintCall?.headers['X-Onramper-DPoP'] as string;
+    const txProofs = txCalls.map((c) => c.headers['X-Onramper-DPoP'] as string);
+
+    for (const proof of [mintProof, ...txProofs]) {
+      const header = decodeProofHeader(proof);
+      expect(header.typ).toBe('dpop+jwt');
+      expect(header.alg).toBe('ES256');
+      expect((header.jwk as { kty: string }).kty).toBe('EC');
+      expect((header.jwk as { crv: string }).crv).toBe('P-256');
+      await expect(verifyProofSignature(proof)).resolves.toBe(true);
+    }
+
+    // The bootstrap mint has no access token yet; the session-gated calls do.
+    expect(decodeProofPayload(mintProof).ath).toBeUndefined();
+    for (const proof of txProofs) {
+      expect(decodeProofPayload(proof).ath).toBeTruthy();
+    }
+
+    // Same DPoP key (cnf.jkt binding) reused across calls in one protocol instance.
+    const [first, second] = txProofs.map((p) => decodeProofHeader(p).jwk as { x: string; y: string });
+    expect(first?.x).toBe(second?.x);
+    expect(first?.y).toBe(second?.y);
+  });
+
   it('a raw network throw during the token exchange surfaces as OnramperError', async () => {
     const http = mockHttp([
       {
@@ -209,7 +249,7 @@ describe('token lifecycle', () => {
     ]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.UPSTREAM_ERROR, /Failed to obtain access token/));
   });
 
   it('a raw failure during refresh surfaces as OnramperError, not a native throw', async () => {
@@ -229,7 +269,9 @@ describe('token lifecycle', () => {
     ]);
     const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
     await p.getTransactionDetail('s'); // bootstrap mints an already-expired token
-    await expect(p.getTransactionDetail('s')).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
+    await expect(p.getTransactionDetail('s')).rejects.toMatchObject(
+      reject(OnramperErrorCode.UPSTREAM_ERROR, /Failed to obtain access token/),
+    );
     expect(mint).toBe(1); // refresh failed raw → not re-bootstrapped (session preserved)
   });
 
@@ -250,7 +292,9 @@ describe('token lifecycle', () => {
     ]);
     const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
     await p.getTransactionDetail('s'); // bootstrap mints an already-expired token
-    await expect(p.getTransactionDetail('s')).rejects.toMatchObject({ code: OnramperErrorCode.DECODE_ERROR });
+    await expect(p.getTransactionDetail('s')).rejects.toMatchObject(
+      reject(OnramperErrorCode.DECODE_ERROR, /Failed to decode response body/),
+    );
     expect(mint).toBe(1); // surfaced, NOT masked by a re-bootstrap
   });
 
@@ -284,7 +328,7 @@ describe('quote selection requires a priced entry', () => {
         cryptoAsset: 'eth',
         fiatAmount: 100_00n,
       }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.QUOTE_UNAVAILABLE, /No quote available/));
   });
 
   it('a null rate is not treated as priced', async () => {
@@ -298,7 +342,7 @@ describe('quote selection requires a priced entry', () => {
         cryptoAsset: 'eth',
         fiatAmount: 100_00n,
       }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.QUOTE_UNAVAILABLE, /No quote available/));
   });
 
   it('all entries errored → quote_unavailable', async () => {
@@ -312,7 +356,7 @@ describe('quote selection requires a priced entry', () => {
         cryptoAsset: 'eth',
         cryptoAmount: 1_000_000_000_000_000_000n, // 1 ETH
       }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.QUOTE_UNAVAILABLE, /No quote available/));
   });
 });
 
@@ -396,7 +440,10 @@ describe('signed-URL builders', () => {
     });
     await expect(
       p.sell({ fiatCurrency: 'usd', cryptoAsset: 'btc', cryptoAmount: 10_000_000n, refundAddress: 'bc1' }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR, cause: boom });
+    ).rejects.toMatchObject({
+      ...reject(OnramperErrorCode.UPSTREAM_ERROR, /The signUrl callback failed/),
+      cause: boom,
+    });
   });
 
   it('an OnramperError thrown by signUrl passes through unchanged', async () => {

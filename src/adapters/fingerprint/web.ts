@@ -1,4 +1,4 @@
-import { bytesToBase64Url } from '../../utils/base64url.ts';
+import { bytesToBase64Url } from '../../utils/format.ts';
 import type { CryptoAdapter, FingerprintAdapter } from '../types.ts';
 
 /**

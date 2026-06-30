@@ -9,8 +9,8 @@ export type {
   StorageAdapter,
 } from './adapters/types.ts';
 
-export { OnramperError, OnramperErrorCode } from './errors/index.ts';
-export { OnramperFiatProtocol, OnramperFiatProtocol as default } from './protocol/onramper-fiat-protocol.ts';
+export { OnramperError, OnramperErrorCode } from './errors.ts';
+export { OnramperFiatProtocol, OnramperFiatProtocol as default } from './protocol.ts';
 
 export type {
   GetSessionToken,

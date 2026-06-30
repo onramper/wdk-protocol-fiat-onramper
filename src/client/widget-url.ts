@@ -1,4 +1,4 @@
-import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../errors.ts';
 import type { SignUrl, SignUrlParams } from '../types/onramper.ts';
 import type { OnramperRequestConfig } from '../types/wdk.ts';
 

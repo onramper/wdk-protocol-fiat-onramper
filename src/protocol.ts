@@ -1,22 +1,21 @@
 import type { IWalletAccount, IWalletAccountReadOnly } from '@tetherto/wdk-wallet';
 import { FiatProtocol } from '@tetherto/wdk-wallet/protocols';
-import { channelForRuntime, detectRuntime, resolveAdapters } from '../adapters/index.ts';
-import { Endpoints } from '../client/endpoints.ts';
-import { AuthorizedClient } from '../client/http-client.ts';
-import { SessionManager } from '../client/session-manager.ts';
-import { buildBuyUrl, buildSellUrl } from '../client/widget-url.ts';
-import { DEFAULT_CACHE_TIME_MS, ENVIRONMENT_URLS } from '../config/defaults.ts';
-import { validateConfig } from '../config/schema.ts';
-import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
-import { toFiatQuote } from '../transforms/quote.ts';
+import { channelForRuntime, detectRuntime, resolveAdapters } from './adapters/index.ts';
+import { Endpoints } from './client/endpoints.ts';
+import { AuthorizedClient } from './client/http-client.ts';
+import { SessionManager } from './client/session-manager.ts';
+import { buildBuyUrl, buildSellUrl } from './client/widget-url.ts';
+import { DEFAULT_CACHE_TIME_MS, ENVIRONMENT_URLS, validateConfig } from './config.ts';
+import { OnramperError, OnramperErrorCode } from './errors.ts';
+import { toFiatQuote } from './transforms/quote.ts';
 import {
   findSupportedPair,
   toSupportedCountries,
   toSupportedCryptoAssets,
   toSupportedFiatCurrencies,
-} from '../transforms/supported.ts';
-import { toFiatTransactionDetail } from '../transforms/transaction.ts';
-import type { OnramperChannel, OnramperFiatConfig } from '../types/onramper.ts';
+} from './transforms/supported.ts';
+import { toFiatTransactionDetail } from './transforms/transaction.ts';
+import type { OnramperChannel, OnramperFiatConfig } from './types/onramper.ts';
 import type {
   BuyResult,
   FiatDirection,
@@ -31,11 +30,35 @@ import type {
   SupportedCountry,
   SupportedCryptoAsset,
   SupportedFiatCurrency,
-} from '../types/wdk.ts';
-import { TtlCache } from '../utils/cache.ts';
-import { toBaseUnitBigInt, toDecimalString } from '../utils/units.ts';
+} from './types/wdk.ts';
+import { TtlCache } from './utils/cache.ts';
+import { toBaseUnitBigInt, toDecimalString } from './utils/units.ts';
 
 type WdkAccount = IWalletAccount | IWalletAccountReadOnly;
+
+/** The WDK amount XOR before it's resolved to a single side. */
+interface AmountInput {
+  cryptoAmount?: number | bigint;
+  fiatAmount?: number | bigint;
+}
+
+/** The WDK amount XOR resolved to a single side and its value. */
+interface AmountSelection {
+  side: 'crypto' | 'fiat';
+  value: number | bigint;
+}
+
+/** A pair's crypto + fiat decimals, resolved from the supported payload. */
+interface AssetDecimals {
+  cryptoDecimals: number;
+  fiatDecimals: number;
+}
+
+/** Decimal amount strings in the widget's expected form, on the side the caller specified. */
+interface WidgetAmounts {
+  fiatAmount?: string;
+  cryptoAmount?: string;
+}
 
 /**
  * Onramper's WDK fiat protocol — extends `FiatProtocol` from
@@ -222,10 +245,7 @@ export class OnramperFiatProtocol extends FiatProtocol {
    *
    * @throws {OnramperError} `INVALID_ARGUMENT` when neither or both are set.
    */
-  private static selectAmount(options: { cryptoAmount?: number | bigint; fiatAmount?: number | bigint }): {
-    side: 'crypto' | 'fiat';
-    value: number | bigint;
-  } {
+  private static selectAmount(options: AmountInput): AmountSelection {
     const { cryptoAmount, fiatAmount } = options;
     if (cryptoAmount != null && fiatAmount != null) {
       throw new OnramperError(
@@ -254,10 +274,7 @@ export class OnramperFiatProtocol extends FiatProtocol {
    * @throws {OnramperError} `UNSUPPORTED_ASSET` when a code is unknown;
    *   `DECODE_ERROR` when a known asset omits its decimals.
    */
-  private async assetDecimals(
-    cryptoAsset: string,
-    fiatCurrency: string,
-  ): Promise<{ cryptoDecimals: number; fiatDecimals: number }> {
+  private async assetDecimals(cryptoAsset: string, fiatCurrency: string): Promise<AssetDecimals> {
     const { crypto, fiat } = findSupportedPair(await this.fetchSupported(), cryptoAsset, fiatCurrency);
     if (!crypto || !fiat) {
       throw new OnramperError(OnramperErrorCode.UNSUPPORTED_ASSET, `Unsupported pair: ${cryptoAsset}/${fiatCurrency}`);
@@ -274,9 +291,7 @@ export class OnramperFiatProtocol extends FiatProtocol {
    *
    * @throws {OnramperError} `INVALID_ARGUMENT` when neither, both, or a non-integer amount is given.
    */
-  private async toWidgetAmounts(
-    options: OnramperBuyOptions | OnramperSellOptions,
-  ): Promise<{ fiatAmount?: string; cryptoAmount?: string }> {
+  private async toWidgetAmounts(options: OnramperBuyOptions | OnramperSellOptions): Promise<WidgetAmounts> {
     const { side, value } = OnramperFiatProtocol.selectAmount(options);
     const base = toBaseUnitBigInt(value);
     const { cryptoDecimals, fiatDecimals } = await this.assetDecimals(options.cryptoAsset, options.fiatCurrency);

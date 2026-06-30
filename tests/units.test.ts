@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OnramperError, OnramperErrorCode } from '../src/errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../src/errors.ts';
 import {
   sumToBaseUnits,
   toBaseUnitBigInt,

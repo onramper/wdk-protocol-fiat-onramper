@@ -1,4 +1,4 @@
-import { randomId } from '../../utils/random.ts';
+import { randomId } from '../../utils/format.ts';
 import type { FingerprintAdapter, StorageAdapter } from '../types.ts';
 
 const FINGERPRINT_KEY = 'onramper.wdk.fingerprint';

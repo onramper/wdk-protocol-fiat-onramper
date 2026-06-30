@@ -78,8 +78,7 @@
   "dependencies": {
     "@tetherto/wdk-wallet": "^1.0.0-beta.11",
     "bare-node-runtime": "^1.5.0",
-    "bignumber.js": "^9.3.1",
-    "zod": "^4.3.6"
+    "bignumber.js": "^9.3.1"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",

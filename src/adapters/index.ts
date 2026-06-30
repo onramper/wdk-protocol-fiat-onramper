@@ -1,4 +1,4 @@
-import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../errors.ts';
 import type { OnramperChannel } from '../types/onramper.ts';
 import { createWebCryptoAdapter } from './crypto/webcrypto.ts';
 import { createPersistedFingerprintAdapter } from './fingerprint/persisted.ts';

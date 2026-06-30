@@ -245,7 +245,10 @@ describe('IFiatProtocol contract', () => {
       baseConfig({ adapters: http.adapters(), getSessionToken: undefined }),
     );
 
-    await expect(proto.getTransactionDetail('sess_abc')).rejects.toMatchObject({ code: 'invalid_config' });
+    await expect(proto.getTransactionDetail('sess_abc')).rejects.toMatchObject({
+      code: 'invalid_config',
+      message: expect.stringMatching(/getSessionToken/),
+    });
     expect(http.calls).toHaveLength(0);
   });
 

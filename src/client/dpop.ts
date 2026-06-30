@@ -1,6 +1,6 @@
 import type { CryptoAdapter, Es256KeyHandle } from '../adapters/types.ts';
-import { bytesToBase64Url, jsonToBase64Url } from '../utils/base64url.ts';
-import { randomId } from '../utils/random.ts';
+import { OnramperError, OnramperErrorCode } from '../errors.ts';
+import { bytesToBase64Url, jsonToBase64Url, randomId } from '../utils/format.ts';
 
 /** The minimal EC public JWK carried in a DPoP header (RFC 9449 / RFC 7517). */
 interface EcPublicJwk {
@@ -14,10 +14,13 @@ interface EcPublicJwk {
  * Normalise an exported JWK to exactly the members a DPoP header may carry.
  * WebCrypto adds `ext`/`key_ops`; including them would change the RFC 7638
  * thumbprint and break the `cnf.jkt` match the server enforces.
+ *
+ * @throws {OnramperError} `INVALID_CONFIG` when an injected crypto adapter
+ *   exports a public key that isn't an EC P-256 JWK.
  */
 function toEcPublicJwk(jwk: JsonWebKey): EcPublicJwk {
   if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) {
-    throw new Error('DPoP requires an EC P-256 public JWK');
+    throw new OnramperError(OnramperErrorCode.INVALID_CONFIG, 'DPoP requires an EC P-256 public JWK');
   }
   return { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y };
 }

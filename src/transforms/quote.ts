@@ -1,6 +1,6 @@
-import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
+import { OnramperError, OnramperErrorCode } from '../errors.ts';
 import type { OnramperFiatQuote } from '../types/wdk.ts';
-import { toOptionalString } from '../utils/coerce.ts';
+import { toOptionalString } from '../utils/format.ts';
 import { sumToBaseUnits, toBaseUnitsOrNull } from '../utils/units.ts';
 
 /**
@@ -21,6 +21,16 @@ interface RawQuote {
   errors?: unknown[];
 }
 
+/** The caller's exact request side and the asset decimals needed to scale the provider's `payout`. */
+interface QuoteContext {
+  fiatDecimals: number;
+  cryptoDecimals: number;
+  /** The exact base-unit amount the caller specified. */
+  requestedBaseUnits: bigint;
+  /** Which side `requestedBaseUnits` denominates. */
+  requestedSide: 'fiat' | 'crypto';
+}
+
 /**
  * Pick the best quote and map it onto the WDK `FiatQuote`: amounts as base-unit
  * integers, `fee` summed in the fiat minor unit, `rate` as a string, with the raw
@@ -31,17 +41,7 @@ interface RawQuote {
  * @throws {OnramperError} `QUOTE_UNAVAILABLE` when no error-free entry yields a
  *   positive whole base-unit payout.
  */
-export function toFiatQuote(
-  raw: unknown,
-  context: {
-    fiatDecimals: number;
-    cryptoDecimals: number;
-    /** The exact base-unit amount the caller specified. */
-    requestedBaseUnits: bigint;
-    /** Which side `requestedBaseUnits` denominates. */
-    requestedSide: 'fiat' | 'crypto';
-  },
-): OnramperFiatQuote {
+export function toFiatQuote(raw: unknown, context: QuoteContext): OnramperFiatQuote {
   const quotes = (raw as { quotes?: unknown })?.quotes;
   const list: RawQuote[] = Array.isArray(raw) ? raw : Array.isArray(quotes) ? (quotes as RawQuote[]) : [];
   const payoutDecimals = context.requestedSide === 'fiat' ? context.cryptoDecimals : context.fiatDecimals;

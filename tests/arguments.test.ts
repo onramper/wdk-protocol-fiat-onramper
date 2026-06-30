@@ -1,6 +1,6 @@
 import type { IWalletAccountReadOnly } from '@tetherto/wdk-wallet';
 import { describe, expect, it } from 'vitest';
-import { OnramperErrorCode } from '../src/errors/codes.ts';
+import { OnramperErrorCode } from '../src/errors.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { SignUrlParams } from '../src/types/onramper.ts';
 import { baseConfig, json, mockHttp, supportedRoute } from './helpers.ts';
@@ -42,12 +42,12 @@ describe('amount-XOR / argument validation (INVALID_ARGUMENT)', () => {
   });
 
   it('rejects a non-integer number amount with a typed error (not a raw RangeError)', async () => {
-    await expect(proto().quoteBuy({ ...base, fiatAmount: 100.5 })).rejects.toMatchObject({
-      code: OnramperErrorCode.INVALID_ARGUMENT,
-    });
-    await expect(proto().buy({ ...base, fiatAmount: 100.5, recipient: '0xabc' })).rejects.toMatchObject({
-      code: OnramperErrorCode.INVALID_ARGUMENT,
-    });
+    await expect(proto().quoteBuy({ ...base, fiatAmount: 100.5 })).rejects.toMatchObject(
+      reject(OnramperErrorCode.INVALID_ARGUMENT, /whole number/),
+    );
+    await expect(proto().buy({ ...base, fiatAmount: 100.5, recipient: '0xabc' })).rejects.toMatchObject(
+      reject(OnramperErrorCode.INVALID_ARGUMENT, /whole number/),
+    );
   });
 
   it('accepts a zero amount (0n must survive the `!= null` guard, not be rejected as falsy)', async () => {
@@ -126,9 +126,9 @@ describe('quote robustness', () => {
         { match: '/quotes/usd/eth', handler: () => json(200, [{ rate: 3000, payout, ramp: 'p' }]) },
       ]);
       const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
-      await expect(p.quoteBuy({ ...base, fiatAmount: 100_00n })).rejects.toMatchObject({
-        code: OnramperErrorCode.QUOTE_UNAVAILABLE,
-      });
+      await expect(p.quoteBuy({ ...base, fiatAmount: 100_00n })).rejects.toMatchObject(
+        reject(OnramperErrorCode.QUOTE_UNAVAILABLE, /No quote available/),
+      );
     }
   });
 
@@ -141,7 +141,7 @@ describe('quote robustness', () => {
     // 0.004 USD floors to 0 minor units at 2 decimals → not a usable quote.
     await expect(
       p.quoteSell({ fiatCurrency: 'usd', cryptoAsset: 'eth', cryptoAmount: 1_000_000_000_000_000_000n }),
-    ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
+    ).rejects.toMatchObject(reject(OnramperErrorCode.QUOTE_UNAVAILABLE, /No quote available/));
   });
 
   it('truncates an over-precise crypto payout toward zero (never over-credits)', async () => {
@@ -170,9 +170,9 @@ describe('quote robustness', () => {
       { match: '/quotes/usd/btc', handler: () => json(200, [{ rate: 60000, payout: '0.01', ramp: 'p' }]) },
     ]);
     const p = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
-    await expect(p.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'btc', fiatAmount: 100_00n })).rejects.toMatchObject({
-      code: OnramperErrorCode.DECODE_ERROR,
-    });
+    await expect(p.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'btc', fiatAmount: 100_00n })).rejects.toMatchObject(
+      reject(OnramperErrorCode.DECODE_ERROR, /Missing decimals/),
+    );
   });
 
   it('resolves decimals with a single cold-cache GET /supported (no double-fetch)', async () => {

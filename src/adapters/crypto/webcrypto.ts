@@ -1,9 +1,14 @@
+import { OnramperError, OnramperErrorCode } from '../../errors.ts';
 import type { CryptoAdapter, Es256KeyHandle } from '../types.ts';
 
+/**
+ * @throws {OnramperError} `INVALID_CONFIG` when the runtime exposes no
+ *   `crypto.subtle` and no override was supplied via `config.adapters.crypto`.
+ */
 function getSubtle(): SubtleCrypto {
   const subtle = globalThis.crypto?.subtle;
   if (!subtle) {
-    throw new Error('WebCrypto SubtleCrypto is unavailable in this runtime');
+    throw new OnramperError(OnramperErrorCode.INVALID_CONFIG, 'WebCrypto SubtleCrypto is unavailable in this runtime');
   }
   return subtle;
 }

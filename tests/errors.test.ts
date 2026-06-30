@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OnramperError } from '../src/errors/errors.ts';
-import { mapCheckoutError, mapOAuthError, OnramperErrorCode } from '../src/errors/index.ts';
+import { mapCheckoutError, mapOAuthError, OnramperError, OnramperErrorCode } from '../src/errors.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { OnramperFiatConfig } from '../src/types/onramper.ts';
 import { baseConfig } from './helpers.ts';

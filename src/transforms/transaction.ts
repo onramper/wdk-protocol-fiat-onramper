@@ -1,5 +1,5 @@
 import type { FiatTransactionStatus, OnramperTransactionDetail } from '../types/wdk.ts';
-import { toOptionalString } from '../utils/coerce.ts';
+import { toOptionalString } from '../utils/format.ts';
 
 /**
  * Shape from `GET /checkout/session/{sessionId}/transaction`: a `{valid,
