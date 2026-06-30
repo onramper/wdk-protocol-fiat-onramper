@@ -1,8 +1,8 @@
-// Runnable integration harness for @onramper/wdk-protocol-fiat.
+// Runnable integration harness for @onramper/wdk-protocol-fiat-onramper.
 // Exercises every method against a real environment in many combinations and
 // prints a PASS / EXPECTED / SKIP / FAIL matrix. See ./README.md.
 //
-// In your own project: import { OnramperFiatProtocol } from '@onramper/wdk-protocol-fiat'
+// In your own project: import { OnramperFiatProtocol } from '@onramper/wdk-protocol-fiat-onramper'
 import { OnramperError, OnramperErrorCode, OnramperFiatProtocol } from '../../dist/index.node.js';
 
 const API_KEY = process.env.ONRAMPER_API_KEY;
@@ -110,7 +110,7 @@ const Q_UNAVAIL = [
 
 // Log only the key TYPE (pk_test_/pk_prod_), never the identifier.
 const keyType = API_KEY.replace(/^(pk_(?:test|prod)_).*/i, '$1***');
-console.log(`\n@onramper/wdk-protocol-fiat — integration run (env=${ENV}, key=${keyType})`);
+console.log(`\n@onramper/wdk-protocol-fiat-onramper — integration run (env=${ENV}, key=${keyType})`);
 
 group('Supported');
 await scenario('getSupportedCryptoAssets()', () => fiat.getSupportedCryptoAssets(), {
@@ -123,61 +123,72 @@ await scenario('getSupportedCountries()', () => fiat.getSupportedCountries(), {
   summarize: (a) => `${a.length} countries${a[0] ? ` e.g. ${a[0].code}/${a[0].name}` : ''}`,
 });
 
-group('Quotes — buy (fiat → crypto), several pairs & amounts');
+// Amounts are integers in the asset's smallest unit: fiat minor units (cents)
+// for a buy spend, base units (wei/sat) for a sell.
+group('Quotes — buy (spend an exact fiat amount), several pairs');
 for (const [fiatCurrency, cryptoAsset, fiatAmount] of [
-  ['eur', 'btc', 500],
-  ['usd', 'eth', 100],
-  ['gbp', 'usdc', 250],
-  ['eur', 'btc', 50_000],
+  ['eur', 'btc', 500_00n], // €500.00
+  ['usd', 'eth', 100_00n], // $100.00
+  ['gbp', 'usdc', 250_00n], // £250.00
+  ['eur', 'btc', 50_000_00n], // €50,000.00
 ]) {
   await scenario(
     `quoteBuy ${fiatCurrency}→${cryptoAsset} ${fiatAmount}`,
     () => fiat.quoteBuy({ fiatCurrency, cryptoAsset, fiatAmount }),
-    { expectErrors: Q_UNAVAIL, summarize: (q) => `${q.provider} rate=${q.rate} out=${q.cryptoAmount}` },
+    { expectErrors: Q_UNAVAIL, summarize: (q) => `${q.metadata.provider} rate=${q.rate} out=${q.cryptoAmount}` },
   );
 }
 
-group('Quotes — sell (crypto → fiat)');
+group('Quotes — sell (sell an exact crypto amount)');
 for (const [fiatCurrency, cryptoAsset, cryptoAmount] of [
-  ['usd', 'eth', '0.5'],
-  ['eur', 'btc', '0.02'],
+  ['usd', 'eth', 500_000_000_000_000_000n], // 0.5 ETH (18 decimals)
+  ['eur', 'btc', 2_000_000n], // 0.02 BTC (8 decimals)
 ]) {
   await scenario(
     `quoteSell ${cryptoAsset}→${fiatCurrency} ${cryptoAmount}`,
     () => fiat.quoteSell({ fiatCurrency, cryptoAsset, cryptoAmount }),
-    { expectErrors: Q_UNAVAIL, summarize: (q) => `${q.provider} rate=${q.rate}` },
+    { expectErrors: Q_UNAVAIL, summarize: (q) => `${q.metadata.provider} rate=${q.rate} out=${q.fiatAmount}` },
   );
 }
 
-group('Widget URLs — buy / sell (pure signed-URL builders, no backend call)');
+group('Widget URLs — buy / sell (signed via your signUrl callback)');
 await scenario(
-  'buy usd→eth 120 → recipient',
+  'buy usd→eth $120 → recipient',
   () =>
     fiat.buy({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      fiatAmount: 120,
+      fiatAmount: 120_00n,
       recipient: '0xabc0000000000000000000000000000000000001',
     }),
-  { summarize: (r) => `${redact(r.buyUrl).slice(0, 72)}…` },
+  { expectErrors: [OnramperErrorCode.UNSUPPORTED_ASSET], summarize: (r) => `${redact(r.buyUrl).slice(0, 72)}…` },
 );
 await scenario(
-  'buy eur→btc 500 + quoteId + network',
+  'buy eur→btc €500 + quoteId + network',
   () =>
     fiat.buy({
       fiatCurrency: 'eur',
       cryptoAsset: 'btc',
-      fiatAmount: 500,
+      fiatAmount: 500_00n,
       recipient: 'bc1qexample',
-      networkCode: 'bitcoin',
-      quoteId: 'q-123',
+      config: { networkCode: 'bitcoin', quoteId: 'q-123' },
     }),
-  { summarize: (r) => (r.buyUrl.includes('quoteId=q-123') ? 'quoteId forwarded ✓' : 'quoteId MISSING') },
+  {
+    expectErrors: [OnramperErrorCode.UNSUPPORTED_ASSET],
+    summarize: (r) => (r.buyUrl.includes('quoteId=q-123') ? 'quoteId forwarded ✓' : 'quoteId MISSING'),
+  },
 );
 await scenario(
   'sell eth→usd 0.25 → refundAddress',
-  () => fiat.sell({ fiatCurrency: 'usd', cryptoAsset: 'eth', cryptoAmount: '0.25', refundAddress: '0xrefund' }),
+  () =>
+    fiat.sell({
+      fiatCurrency: 'usd',
+      cryptoAsset: 'eth',
+      cryptoAmount: 250_000_000_000_000_000n, // 0.25 ETH
+      refundAddress: '0xrefund',
+    }),
   {
+    expectErrors: [OnramperErrorCode.UNSUPPORTED_ASSET],
     summarize: (r) =>
       r.sellUrl.includes('mode=sell') || r.sellUrl.includes('direction=sell')
         ? 'sell URL ✓'
@@ -205,7 +216,7 @@ if (!haveSession) {
       OnramperErrorCode.INVALID_GRANT,
       OnramperErrorCode.UNAUTHORIZED,
     ],
-    summarize: (d) => `status=${d.status} provider=${d.provider} tx=${d.transactionId ?? ''}`,
+    summarize: (d) => `status=${d.status} provider=${d.metadata.provider ?? ''}`,
   });
 }
 

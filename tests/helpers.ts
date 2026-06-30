@@ -47,6 +47,24 @@ export const tokenRoute = {
     }),
 };
 
+/** Standard supported payload carrying the decimals the amount conversion needs (eth 18, btc 8, usd/eur 2). */
+export const SUPPORTED_PAYLOAD = {
+  crypto: [
+    { code: 'eth', networkCode: 'ethereum', decimals: 18, name: 'Ethereum' },
+    { code: 'btc', networkCode: 'bitcoin', decimals: 8, name: 'Bitcoin' },
+  ],
+  fiat: [
+    { code: 'usd', decimals: 2, name: 'US Dollar' },
+    { code: 'eur', decimals: 2, name: 'Euro' },
+  ],
+};
+
+/** Mocks `GET /supported` so quote/buy/sell can resolve an asset's decimals. */
+export const supportedRoute = {
+  match: '/supported',
+  handler: () => json(200, { message: SUPPORTED_PAYLOAD }),
+};
+
 export function baseConfig(overrides: Partial<OnramperFiatConfig> = {}): OnramperFiatConfig {
   return {
     apiKey: 'pk_test_abc123',

@@ -1,18 +1,25 @@
 {
-  "name": "@onramper/wdk-protocol-fiat",
-  "version": "0.1.0",
-  "description": "Onramper implementation of the Tether WDK IFiatProtocol \u2014 web and Node on/off-ramp adapter",
+  "name": "@onramper/wdk-protocol-fiat-onramper",
+  "version": "0.2.0",
+  "description": "Onramper fiat on/off-ramp protocol for the Tether WDK — extends @tetherto/wdk-wallet FiatProtocol (web, Node, Bare)",
   "license": "Apache-2.0",
   "author": "Onramper <engineering@onramper.com>",
-  "repository": "https://github.com/onramper/wdk-protocol-fiat",
-  "homepage": "https://github.com/onramper/wdk-protocol-fiat#readme",
-  "bugs": "https://github.com/onramper/wdk-protocol-fiat/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onramper/wdk-protocol-fiat-onramper.git"
+  },
+  "homepage": "https://github.com/onramper/wdk-protocol-fiat-onramper#readme",
+  "bugs": "https://github.com/onramper/wdk-protocol-fiat-onramper/issues",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.cts",
   "exports": {
     ".": {
+      "bare": {
+        "types": "./dist/index.d.ts",
+        "default": "./bare.js"
+      },
       "browser": {
         "import": {
           "types": "./dist/index.d.ts",
@@ -44,7 +51,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "bare.js"
   ],
   "scripts": {
     "build": "tsdown",
@@ -68,6 +76,9 @@
     "provenance": true
   },
   "dependencies": {
+    "@tetherto/wdk-wallet": "^1.0.0-beta.11",
+    "bare-node-runtime": "^1.5.0",
+    "bignumber.js": "^9.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {

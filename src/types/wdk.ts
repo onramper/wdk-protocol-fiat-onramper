@@ -1,141 +1,83 @@
 /**
- * Types mirroring Tether's WDK `IFiatProtocol` contract.
- *
- * Source of truth: https://github.com/tetherto/wdk-wallet `src/protocols/fiat-protocol.js`.
- * We re-express the (untyped) JS contract in TypeScript so Onramper plugs into
- * WDK wallets identically to `@tetherto/wdk-protocol-fiat-moonpay`. Method names,
- * argument shapes, and the `buyUrl`/`sellUrl` return fields must stay aligned
- * with that interface — drift breaks WDK consumers.
+ * Canonical WDK fiat-protocol contract, re-exported verbatim from
+ * `@tetherto/wdk-wallet`, plus Onramper's provider-specific extensions layered
+ * on top via the `config` (input) / `metadata` (output) pattern that
+ * `@tetherto/wdk-protocol-fiat-moonpay` uses. The base shapes are the source of
+ * truth — never redeclared here, so they cannot drift from the contract a WDK
+ * wallet relies on.
  */
 
-/** Direction of a fiat ramp, used where buy and sell share a code path. */
+export type {
+  BuyOptions,
+  BuyResult,
+  FiatQuote,
+  FiatTransactionDetail,
+  FiatTransactionStatus,
+  IFiatProtocol,
+  SellOptions,
+  SellResult,
+  SupportedCountry,
+  SupportedCryptoAsset,
+  SupportedFiatCurrency,
+} from '@tetherto/wdk-wallet/protocols';
+
+import type { BuyOptions, FiatQuote, FiatTransactionDetail, SellOptions } from '@tetherto/wdk-wallet/protocols';
+
+/** Internal buy/sell discriminator. Not part of the WDK surface. */
 export type FiatDirection = 'buy' | 'sell';
 
-/** Lifecycle of a ramp transaction, normalised across Onramper providers. */
-export type FiatTxStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'expired' | 'unknown';
-
-/** A priced quote for a buy or sell. Amounts are decimal strings to avoid float loss. */
-export interface FiatQuote {
-  direction: FiatDirection;
-  fiatCurrency: string;
-  cryptoAsset: string;
-  fiatAmount: string;
-  cryptoAmount: string;
-  rate: string;
-  networkFee?: string;
-  transactionFee?: string;
-  paymentMethod?: string;
-  provider?: string;
-  quoteId?: string;
-  /** Unix seconds after which the quote must be re-fetched, when the provider supplies it. */
-  expiresAt?: number;
-}
-
-/** Result of `buy()` — the widget URL the consumer opens to complete the purchase. */
-export interface BuyResult {
-  buyUrl: string;
-}
-
-/** Result of `sell()` — the widget URL the consumer opens to complete the sale. */
-export interface SellResult {
-  sellUrl: string;
-}
-
-/** Resolved detail for a single ramp transaction. */
-export interface FiatTransactionDetail {
-  status: FiatTxStatus;
-  cryptoAsset: string;
-  fiatCurrency: string;
-  fiatAmount?: string;
-  cryptoAmount?: string;
-  txHash?: string;
-  provider?: string;
-}
-
-/** One crypto asset Onramper can ramp, with its network and on-chain decimals. */
-export interface SupportedCryptoAsset {
-  code: string;
-  networkCode: string;
-  decimals: number;
-  name: string;
-}
-
-/** One fiat currency Onramper supports, with its minor-unit decimals. */
-export interface SupportedFiatCurrency {
-  code: string;
-  decimals: number;
-  name: string;
-}
-
-/** One supported country with its buy/sell allow-flags. */
-export interface SupportedCountry {
-  code: string;
-  isBuyAllowed: boolean;
-  isSellAllowed: boolean;
-  name: string;
-}
-
-/** Quote inputs for a buy: spend `fiatAmount` of `fiatCurrency` to receive `cryptoAsset`. */
-export interface QuoteBuyOptions {
-  fiatCurrency: string;
-  cryptoAsset: string;
-  fiatAmount: number | string;
+/**
+ * Onramper-specific widget/quote knobs, carried under `config` so the base
+ * Buy/Sell options stay exactly WDK-shaped — a wallet that only knows the WDK
+ * contract simply omits `config`.
+ */
+export interface OnramperRequestConfig {
+  /** Network/chain code when a crypto asset spans several chains. */
   networkCode?: string;
+  /** Preferred payment (buy) or payout (sell) method. */
   paymentMethod?: string;
+  /** ISO-3166 country used for availability and pricing. */
   country?: string;
-}
-
-/** Quote inputs for a sell: sell `cryptoAmount` of `cryptoAsset` for `fiatCurrency`. */
-export interface QuoteSellOptions {
-  fiatCurrency: string;
-  cryptoAsset: string;
-  cryptoAmount: number | string;
-  networkCode?: string;
-  paymentMethod?: string;
-  country?: string;
-}
-
-/** `buy()` additionally needs the crypto recipient address. */
-export interface BuyOptions extends QuoteBuyOptions {
-  recipient: string;
+  /** Destination memo/tag for chains that require one. */
   memo?: string;
+  /** Pins buy/sell to a quote previously returned by quoteBuy/quoteSell. */
   quoteId?: string;
 }
 
-/** `sell()` additionally needs the address to refund to if the sale fails. */
-export interface SellOptions extends QuoteSellOptions {
-  refundAddress: string;
-  memo?: string;
-  quoteId?: string;
-}
+export type OnramperBuyOptions = BuyOptions & { config?: OnramperRequestConfig };
+export type OnramperSellOptions = SellOptions & { config?: OnramperRequestConfig };
+export type OnramperQuoteBuyOptions = Omit<BuyOptions, 'recipient'> & { config?: OnramperRequestConfig };
+export type OnramperQuoteSellOptions = Omit<SellOptions, 'refundAddress'> & { config?: OnramperRequestConfig };
 
 /**
- * The WDK fiat-protocol contract. `quoteBuy`/`quoteSell` omit the address field
- * (recipient/refundAddress) since a quote does not move funds. The data and
- * session methods reject with `OnramperError`; `buy`/`sell` are pure URL builders
- * that surface the consumer `signUrl`'s own rejection unwrapped.
- *
- * @see https://github.com/tetherto/wdk-wallet `src/protocols/fiat-protocol.js`
+ * Raw Onramper quote data surfaced under `FiatQuote.metadata` for callers that
+ * need the chosen provider, fee breakdown or payment method — none of which the
+ * WDK `FiatQuote` carries.
  */
-export interface IFiatProtocol {
-  /** Prices a buy. @throws {OnramperError} `QUOTE_UNAVAILABLE` if no priced quote exists; `UPSTREAM_ERROR`/`DECODE_ERROR` from the quotes call. */
-  quoteBuy(options: QuoteBuyOptions): Promise<FiatQuote>;
-  /** Builds the signed buy widget URL via `signUrl`. No backend call. */
-  buy(options: BuyOptions): Promise<BuyResult>;
-  /** Prices a sell. @throws {OnramperError} `QUOTE_UNAVAILABLE` if no priced quote exists; `UPSTREAM_ERROR`/`DECODE_ERROR` from the quotes call. */
-  quoteSell(options: QuoteSellOptions): Promise<FiatQuote>;
-  /** Builds the signed sell widget URL via `signUrl`. No backend call. */
-  sell(options: SellOptions): Promise<SellResult>;
-  /**
-   * Resolves status/amounts for one ramp transaction via the checkout session.
-   * @param direction - Disambiguates buy vs sell lookups; inferred when omitted.
-   * @throws {OnramperError} `INVALID_CONFIG` when `getSessionToken` is not configured; `UPSTREAM_ERROR`/`DECODE_ERROR` from the session call.
-   */
-  getTransactionDetail(txId: string, direction?: FiatDirection): Promise<FiatTransactionDetail>;
-  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
-  getSupportedCryptoAssets(): Promise<SupportedCryptoAsset[]>;
-  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
-  getSupportedFiatCurrencies(): Promise<SupportedFiatCurrency[]>;
-  /** Public data endpoint (TTL-cached). @throws {OnramperError} `UPSTREAM_ERROR`/`DECODE_ERROR` on a failed request. */
-  getSupportedCountries(): Promise<SupportedCountry[]>;
+export interface OnramperQuoteMetadata {
+  quoteId?: string;
+  provider?: string;
+  paymentMethod?: string;
+  /** Provider network fee as a major-unit decimal string (e.g. "0.50" USD) — NOT the base-unit `fee` bigint on FiatQuote. */
+  networkFee?: string;
+  /** Provider transaction fee as a major-unit decimal string, not base/minor units. */
+  transactionFee?: string;
 }
+
+/** Onramper quote: the WDK `FiatQuote` plus provider data under `metadata`. */
+export type OnramperFiatQuote = FiatQuote & { metadata: OnramperQuoteMetadata };
+
+/** Extra transaction fields Onramper resolves, surfaced under `metadata`. */
+export interface OnramperTransactionMetadata {
+  /** The raw provider status string, before normalisation to the WDK 3-state. */
+  status?: string;
+  txHash?: string;
+  provider?: string;
+  /** Provider-reported fiat amount as a major-unit decimal string (e.g. "100.00"), not minor units. */
+  fiatAmount?: string;
+  /** Provider-reported crypto amount as a major-unit decimal string (e.g. "0.05"), not base units. */
+  cryptoAmount?: string;
+}
+
+/** Onramper transaction detail: the WDK shape plus extras under `metadata`. */
+export type OnramperTransactionDetail = FiatTransactionDetail & { metadata: OnramperTransactionMetadata };

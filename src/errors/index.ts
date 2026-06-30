@@ -4,4 +4,4 @@ export {
   OnramperErrorCode,
   REBOOTSTRAP_CODES,
 } from './codes.ts';
-export { mapCheckoutError, mapOAuthError, NotImplementedError, OnramperError } from './errors.ts';
+export { mapCheckoutError, mapOAuthError, OnramperError } from './errors.ts';

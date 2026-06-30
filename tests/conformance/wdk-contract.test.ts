@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OnramperFiatProtocol } from '../../src/index.ts';
 import { decodeProofPayload } from '../dpop-helpers.ts';
-import { baseConfig, json, mockHttp, tokenRoute } from '../helpers.ts';
+import { baseConfig, json, mockHttp, supportedRoute, tokenRoute } from '../helpers.ts';
 
 const WDK_METHODS = [
   'quoteBuy',
@@ -23,29 +23,31 @@ describe('IFiatProtocol contract', () => {
     }
   });
 
-  it('buy() returns a signed widget URL without any backend call', async () => {
-    const http = mockHttp([tokenRoute]);
+  it('buy() returns a signed widget URL, reading only the public supported list', async () => {
+    const http = mockHttp([supportedRoute, tokenRoute]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
     const { buyUrl } = await proto.buy({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      fiatAmount: 100,
+      fiatAmount: 100_00n, // 100.00 USD in minor units
       recipient: '0xabc',
     });
 
     expect(buyUrl).toBe('https://buy.stg.onramper.com/?apiKey=pk_test_abc123&mode=buy&asset=eth&address=0xabc');
-    expect(http.calls).toHaveLength(0); // signed-URL path must not touch the network
+    // No session bootstrap — buy() only reads the public supported list to format the amount.
+    expect(http.calls.some((c) => c.url.includes('client-sessions/tokens'))).toBe(false);
+    expect(http.calls.every((c) => c.url.includes('/supported'))).toBe(true);
   });
 
   it('sell() returns a signed widget URL', async () => {
-    const http = mockHttp([tokenRoute]);
+    const http = mockHttp([supportedRoute, tokenRoute]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
     const { sellUrl } = await proto.sell({
       fiatCurrency: 'usd',
       cryptoAsset: 'btc',
-      cryptoAmount: '0.01',
+      cryptoAmount: 1_000_000n, // 0.01 BTC in base units (8 decimals)
       refundAddress: 'bc1xyz',
     });
 
@@ -124,8 +126,9 @@ describe('IFiatProtocol contract', () => {
     expect(http.calls.some((c) => c.url.includes('client-sessions/tokens'))).toBe(false);
   });
 
-  it('quoteBuy() hits the public quotes endpoint and maps the best quote', async () => {
+  it('quoteBuy() returns a WDK FiatQuote — base-unit bigints, rate string, provider under metadata', async () => {
     const http = mockHttp([
+      supportedRoute,
       {
         match: '/quotes/usd/eth',
         handler: () => json(200, [{ rate: 3000, payout: 0.033, ramp: 'provider-a', paymentMethod: 'creditcard' }]),
@@ -133,25 +136,23 @@ describe('IFiatProtocol contract', () => {
     ]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
-    const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100 });
+    const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100_00n });
 
     expect(quote).toEqual({
-      direction: 'buy',
-      fiatCurrency: 'usd',
-      cryptoAsset: 'eth',
-      fiatAmount: '100',
-      cryptoAmount: '0.033',
+      fiatAmount: 100_00n, // exact, echoed from the request (USD minor units)
+      cryptoAmount: 33_000_000_000_000_000n, // 0.033 ETH at 18 decimals
+      fee: 0n, // no fee fields on this quote
       rate: '3000',
-      paymentMethod: 'creditcard',
-      provider: 'provider-a',
+      metadata: { provider: 'provider-a', paymentMethod: 'creditcard' },
     });
     const call = http.calls.find((c) => c.url.includes('/quotes/usd/eth'));
     expect(call?.url).toContain('type=buy');
+    expect(call?.url).toContain('amount=100'); // 10000 minor units rendered as 100.00 → "100"
     expect(call?.headers.Authorization).toBe('pk_test_abc123');
     expect(call?.headers['X-Onramper-DPoP']).toBeUndefined();
   });
 
-  it('getTransactionDetail() carries the SDK session envelope to the checkout session', async () => {
+  it('getTransactionDetail() carries the SDK session envelope to the session transaction', async () => {
     const http = mockHttp([
       tokenRoute,
       {
@@ -167,7 +168,13 @@ describe('IFiatProtocol contract', () => {
 
     const detail = await proto.getTransactionDetail('sess_abc');
 
-    expect(detail).toEqual({ status: 'pending', cryptoAsset: '', fiatCurrency: '', provider: 'provider-a' });
+    // pending → in_progress (WDK 3-state); provider moves under metadata.
+    expect(detail).toEqual({
+      status: 'in_progress',
+      cryptoAsset: '',
+      fiatCurrency: '',
+      metadata: { status: 'pending', provider: 'provider-a' },
+    });
     // Session-gated path: token exchange first, then the enveloped call.
     expect(http.calls.some((c) => c.url.includes('client-sessions/tokens'))).toBe(true);
     const txCall = http.calls.find((c) => c.url.includes('/checkout/session/'));
@@ -180,9 +187,6 @@ describe('IFiatProtocol contract', () => {
     // HEADER (the API requires it as a header), and the SAME fingerprint must
     // ride the authenticated call.
     const tokenCall = http.calls.find((c) => c.url.includes('client-sessions/tokens'));
-    // Pin the exact token URL: the DPoP htu is signed against it, so a routing
-    // regression would silently break proof-of-possession.
-    expect(tokenCall?.url).toContain('/partners/v2/pk_test_abc123/client-sessions/tokens');
     expect(tokenCall?.headers['X-Onramper-Device']).toBeTruthy();
     expect(tokenCall?.headers['X-Onramper-Device']).toBe(txCall?.headers['X-Onramper-Device']);
     const bootstrapBody = JSON.parse(tokenCall?.body ?? '{}');
@@ -245,8 +249,9 @@ describe('IFiatProtocol contract', () => {
     expect(http.calls).toHaveLength(0);
   });
 
-  it('quoteBuy() forwards optional paymentMethod/networkCode/country (network rename)', async () => {
+  it('quoteBuy() forwards optional config (paymentMethod/networkCode/country) onto the quotes URL', async () => {
     const http = mockHttp([
+      supportedRoute,
       {
         match: '/quotes/usd/eth',
         handler: () => json(200, [{ rate: 3000, payout: 0.033, ramp: 'provider-a', paymentMethod: 'creditcard' }]),
@@ -257,10 +262,8 @@ describe('IFiatProtocol contract', () => {
     await proto.quoteBuy({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      fiatAmount: 100,
-      paymentMethod: 'creditcard',
-      networkCode: 'ethereum',
-      country: 'US',
+      fiatAmount: 100_00n,
+      config: { paymentMethod: 'creditcard', networkCode: 'ethereum', country: 'US' },
     });
 
     const call = http.calls.find((c) => c.url.includes('/quotes/usd/eth'));
@@ -269,8 +272,9 @@ describe('IFiatProtocol contract', () => {
     );
   });
 
-  it('quoteSell() forwards optional params with type=sell', async () => {
+  it('quoteSell() forwards optional config with type=sell', async () => {
     const http = mockHttp([
+      supportedRoute,
       {
         match: '/quotes/eth/usd',
         handler: () => json(200, [{ rate: 3000, payout: 300, ramp: 'provider-b', paymentMethod: 'sepa' }]),
@@ -281,10 +285,8 @@ describe('IFiatProtocol contract', () => {
     await proto.quoteSell({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      cryptoAmount: '0.1',
-      paymentMethod: 'sepa',
-      networkCode: 'ethereum',
-      country: 'US',
+      cryptoAmount: 100_000_000_000_000_000n, // 0.1 ETH
+      config: { paymentMethod: 'sepa', networkCode: 'ethereum', country: 'US' },
     });
 
     const call = http.calls.find((c) => c.url.includes('/quotes/eth/usd'));

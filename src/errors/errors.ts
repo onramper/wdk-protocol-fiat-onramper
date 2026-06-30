@@ -1,16 +1,5 @@
 import { CHECKOUT_ERROR_CODES, OAUTH_ERROR_CODES, OnramperErrorCode } from './codes.ts';
 
-/**
- * Thrown by base/unimplemented protocol methods. Named to match WDK's own
- * `NotImplementedError` so WDK consumers' `instanceof`/name checks keep working.
- */
-export class NotImplementedError extends Error {
-  constructor(message = 'Not implemented') {
-    super(message);
-    this.name = 'NotImplementedError';
-  }
-}
-
 /** Single error type surfaced to consumers, carrying the normalised code. */
 export class OnramperError extends Error {
   readonly code: OnramperErrorCode;

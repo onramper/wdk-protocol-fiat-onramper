@@ -9,6 +9,8 @@
  */
 export enum OnramperErrorCode {
   INVALID_CONFIG = 'invalid_config',
+  /** Client-side: a method was called with conflicting or missing arguments. */
+  INVALID_ARGUMENT = 'invalid_argument',
   UNAUTHORIZED = 'unauthorized',
   INVALID_SDK_SESSION = 'invalid_sdk_session',
   INVALID_USER_TOKEN = 'invalid_user_token',
@@ -21,6 +23,8 @@ export enum OnramperErrorCode {
   INVALID_GRANT = 'invalid_grant',
   QUOTE_UNAVAILABLE = 'quote_unavailable',
   UNSUPPORTED_ASSET = 'unsupported_asset',
+  /** A WDK-valid call this provider's API can't serve (e.g. an exact-crypto buy quote). */
+  UNSUPPORTED_OPERATION = 'unsupported_operation',
   UPSTREAM_ERROR = 'upstream_error',
   NETWORK_ERROR = 'network_error',
   DECODE_ERROR = 'decode_error',

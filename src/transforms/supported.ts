@@ -79,3 +79,20 @@ export function toSupportedCountries(raw: unknown): SupportedCountry[] {
     isSellAllowed: c.isSellAllowed ?? true,
   }));
 }
+
+/**
+ * Look up the raw crypto + fiat entries for a pair in a `GET /supported` payload,
+ * WITHOUT the display defaults the mapping functions apply. The money path (amount
+ * conversion) must use each asset's real `decimals` or fail — a fabricated 18/2
+ * would silently mis-scale user funds.
+ */
+export function findSupportedPair(
+  raw: unknown,
+  cryptoCode: string,
+  fiatCode: string,
+): { crypto?: { decimals?: number }; fiat?: { decimals?: number } } {
+  const supported = (unwrap(raw) as RawSupported) ?? {};
+  const crypto = (supported.crypto ?? []).find((c) => (c.code ?? c.id) === cryptoCode);
+  const fiat = (supported.fiat ?? []).find((f) => (f.code ?? f.id) === fiatCode);
+  return { crypto, fiat };
+}

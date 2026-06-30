@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NotImplementedError, OnramperError } from '../src/errors/errors.ts';
+import { OnramperError } from '../src/errors/errors.ts';
 import { mapCheckoutError, mapOAuthError, OnramperErrorCode } from '../src/errors/index.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { OnramperFiatConfig } from '../src/types/onramper.ts';
@@ -71,20 +71,10 @@ describe('error mapping', () => {
       expectInvalidConfig({ apiKey: '' }, /apiKey is required/);
     });
     it('rejects a missing signUrl', () => {
-      expectInvalidConfig({ signUrl: undefined });
+      expectInvalidConfig({ signUrl: undefined }, /signUrl/);
     });
     it('rejects a negative cacheTime', () => {
-      expectInvalidConfig({ cacheTime: -1 });
-    });
-  });
-
-  describe('NotImplementedError', () => {
-    it('is an Error with the WDK-aligned name and default message', () => {
-      const e = new NotImplementedError();
-      expect(e).toBeInstanceOf(Error);
-      expect(e.name).toBe('NotImplementedError');
-      expect(e.message).toBe('Not implemented');
-      expect(new NotImplementedError('custom').message).toBe('custom');
+      expectInvalidConfig({ cacheTime: -1 }, /cacheTime/);
     });
   });
 });

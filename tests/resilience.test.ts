@@ -4,7 +4,7 @@ import { OnramperError } from '../src/errors/errors.ts';
 import { OnramperFiatProtocol } from '../src/index.ts';
 import type { SignUrlParams } from '../src/types/onramper.ts';
 import { decodeProofPayload } from './dpop-helpers.ts';
-import { baseConfig, json, mockHttp, tokenRoute } from './helpers.ts';
+import { baseConfig, json, mockHttp, supportedRoute, tokenRoute } from './helpers.ts';
 
 /** Raw (possibly non-JSON) response, for malformed-body tests. */
 const raw = (status: number, body: string, headers: Record<string, string> = {}) => ({ status, headers, body });
@@ -47,12 +47,12 @@ describe('HTTP error mapping — every failure surfaces a typed OnramperError', 
   });
 
   it('quotes 503 → upstream_error', async () => {
-    const http = mockHttp([{ match: '/quotes/', handler: () => raw(503, 'Service Unavailable') }]);
+    const http = mockHttp([supportedRoute, { match: '/quotes/', handler: () => raw(503, 'Service Unavailable') }]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).quoteBuy({
         fiatCurrency: 'eur',
         cryptoAsset: 'btc',
-        fiatAmount: 100,
+        fiatAmount: 100_00n,
       }),
     ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR });
   });
@@ -78,7 +78,12 @@ describe('HTTP error mapping — every failure surfaces a typed OnramperError', 
       undefined,
       baseConfig({ adapters: http.adapters() }),
     ).getTransactionDetail('s');
-    expect(detail).toEqual({ status: 'completed', cryptoAsset: '', fiatCurrency: '', provider: 'p' });
+    expect(detail).toEqual({
+      status: 'completed',
+      cryptoAsset: '',
+      fiatCurrency: '',
+      metadata: { status: 'completed', provider: 'p' },
+    });
     expect(txCalls).toBe(2); // exactly one retry
   });
 
@@ -270,39 +275,42 @@ describe('token lifecycle', () => {
 describe('quote selection requires a priced entry', () => {
   it('an error-free entry without a rate is treated as no-quote', async () => {
     const http = mockHttp([
+      supportedRoute,
       { match: '/quotes/', handler: () => json(200, [{ ramp: 'p', paymentMethod: 'creditcard', quoteId: 'q1' }]) },
     ]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).quoteBuy({
         fiatCurrency: 'usd',
         cryptoAsset: 'eth',
-        fiatAmount: 100,
+        fiatAmount: 100_00n,
       }),
     ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
   });
 
   it('a null rate is not treated as priced', async () => {
     const http = mockHttp([
+      supportedRoute,
       { match: '/quotes/', handler: () => json(200, [{ ramp: 'p', rate: null, paymentMethod: 'creditcard' }]) },
     ]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).quoteBuy({
         fiatCurrency: 'usd',
         cryptoAsset: 'eth',
-        fiatAmount: 100,
+        fiatAmount: 100_00n,
       }),
     ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
   });
 
   it('all entries errored → quote_unavailable', async () => {
     const http = mockHttp([
+      supportedRoute,
       { match: '/quotes/', handler: () => json(200, [{ ramp: 'p', errors: [{ errorId: 6200 }] }]) },
     ]);
     await expect(
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).quoteSell({
         fiatCurrency: 'usd',
         cryptoAsset: 'eth',
-        cryptoAmount: '1',
+        cryptoAmount: 1_000_000_000_000_000_000n, // 1 ETH
       }),
     ).rejects.toMatchObject({ code: OnramperErrorCode.QUOTE_UNAVAILABLE });
   });
@@ -311,7 +319,9 @@ describe('quote selection requires a priced entry', () => {
 describe('signed-URL builders', () => {
   it('buy() forwards the full widget params to the signUrl callback', async () => {
     let seen: SignUrlParams | undefined;
+    const http = mockHttp([supportedRoute]);
     const p = proto({
+      adapters: http.adapters(),
       signUrl: async (params) => {
         seen = params;
         return 'https://x';
@@ -320,9 +330,9 @@ describe('signed-URL builders', () => {
     const result = await p.buy({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      fiatAmount: 100,
+      fiatAmount: 100_00n,
       recipient: '0xabc',
-      quoteId: 'q-42',
+      config: { quoteId: 'q-42' },
     });
     expect(result).toEqual({ buyUrl: 'https://x' });
     expect(seen).toEqual({
@@ -331,7 +341,8 @@ describe('signed-URL builders', () => {
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
       networkCode: undefined,
-      fiatAmount: '100',
+      fiatAmount: '100', // 10000 minor units → "100"
+      cryptoAmount: undefined,
       address: '0xabc',
       memo: undefined,
       paymentMethod: undefined,
@@ -342,7 +353,9 @@ describe('signed-URL builders', () => {
 
   it('sell() forwards the full widget params (refundAddress -> address) to the signUrl callback', async () => {
     let seen: SignUrlParams | undefined;
+    const http = mockHttp([supportedRoute]);
     const p = proto({
+      adapters: http.adapters(),
       signUrl: async (params) => {
         seen = params;
         return 'https://x';
@@ -351,13 +364,9 @@ describe('signed-URL builders', () => {
     const result = await p.sell({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      cryptoAmount: '0.5',
+      cryptoAmount: 500_000_000_000_000_000n, // 0.5 ETH
       refundAddress: '0xdef',
-      networkCode: 'ethereum',
-      memo: 'm1',
-      paymentMethod: 'sepa',
-      country: 'US',
-      quoteId: 'q1',
+      config: { networkCode: 'ethereum', memo: 'm1', paymentMethod: 'sepa', country: 'US', quoteId: 'q1' },
     });
     expect(result).toEqual({ sellUrl: 'https://x' });
     expect(seen).toEqual({
@@ -366,6 +375,7 @@ describe('signed-URL builders', () => {
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
       networkCode: 'ethereum',
+      fiatAmount: undefined,
       cryptoAmount: '0.5',
       address: '0xdef',
       memo: 'm1',
@@ -375,15 +385,31 @@ describe('signed-URL builders', () => {
     });
   });
 
-  it('a signUrl rejection propagates to the caller', async () => {
+  it('a raw signUrl rejection is wrapped as a typed OnramperError, preserving the cause', async () => {
     const boom = new Error('sign backend 500');
+    const http = mockHttp([supportedRoute]);
     const p = proto({
+      adapters: http.adapters(),
       signUrl: async () => {
         throw boom;
       },
     });
     await expect(
-      p.sell({ fiatCurrency: 'usd', cryptoAsset: 'btc', cryptoAmount: '0.1', refundAddress: 'bc1' }),
-    ).rejects.toBe(boom);
+      p.sell({ fiatCurrency: 'usd', cryptoAsset: 'btc', cryptoAmount: 10_000_000n, refundAddress: 'bc1' }),
+    ).rejects.toMatchObject({ code: OnramperErrorCode.UPSTREAM_ERROR, cause: boom });
+  });
+
+  it('an OnramperError thrown by signUrl passes through unchanged', async () => {
+    const original = new OnramperError(OnramperErrorCode.INVALID_CONFIG, 'partner refused');
+    const http = mockHttp([supportedRoute]);
+    const p = proto({
+      adapters: http.adapters(),
+      signUrl: async () => {
+        throw original;
+      },
+    });
+    await expect(
+      p.buy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100_00n, recipient: '0xabc' }),
+    ).rejects.toBe(original);
   });
 });

@@ -23,8 +23,11 @@ export interface SignUrlParams {
   networkCode?: string;
   fiatAmount?: string;
   cryptoAmount?: string;
-  /** Recipient (buy) or refund (sell) address. */
-  address: string;
+  /**
+   * Recipient (buy) or refund (sell) address. Omitted when neither a recipient
+   * nor a wallet account is supplied — the widget then prompts for one.
+   */
+  address?: string;
   memo?: string;
   paymentMethod?: string;
   country?: string;
@@ -74,10 +77,4 @@ export interface OnramperFiatConfig {
   channel?: OnramperChannel;
   /** Inject platform adapters; any omitted adapter is auto-detected. */
   adapters?: Partial<Adapters>;
-}
-
-/** Optional WDK wallet account. We read a default address from it when buy/sell omit one. */
-export interface WdkAccount {
-  getAddress?: () => string | Promise<string>;
-  address?: string;
 }

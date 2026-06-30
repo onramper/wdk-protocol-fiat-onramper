@@ -19,4 +19,8 @@ export default defineConfig({
   // in any browser. The Node-specific adapter reaches for `node:*` lazily.
   platform: 'neutral',
   outDir: 'dist',
+  // We expose a default export (the protocol class, for `import X from …` WDK
+  // parity) alongside the named exports. `exports: 'named'` tells rolldown that
+  // pairing is intentional so it doesn't warn; ESM default-import still resolves.
+  outputOptions: { exports: 'named' },
 });

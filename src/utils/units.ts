@@ -1,0 +1,75 @@
+import BigNumber from 'bignumber.js';
+import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
+
+/**
+ * Convert a provider's decimal amount (e.g. `"1.5"` ETH) to a base-unit integer
+ * (e.g. `1500000000000000000n`) using the asset's on-chain / minor-unit
+ * `decimals`. Truncates toward zero so rounding never over-credits the user.
+ */
+export function toBaseUnits(decimalAmount: number | string, decimals: number): bigint {
+  return BigInt(new BigNumber(decimalAmount).shiftedBy(decimals).toFixed(0, BigNumber.ROUND_DOWN));
+}
+
+/**
+ * Like {@link toBaseUnits} but total: returns `null` for a missing, non-finite,
+ * or non-numeric value (e.g. `"N/A"`, `"Infinity"`, `"NaN"`) instead of throwing,
+ * so a caller can skip a degenerate quote rather than crash on `BigInt("NaN")`.
+ * A finite sub-unit decimal still floors to `0n` — the caller decides whether `0`
+ * is acceptable.
+ */
+export function toBaseUnitsOrNull(value: number | string | undefined, decimals: number): bigint | null {
+  if (value == null) {
+    return null;
+  }
+  const n = new BigNumber(value);
+  if (!n.isFinite()) {
+    return null;
+  }
+  return BigInt(n.shiftedBy(decimals).toFixed(0, BigNumber.ROUND_DOWN));
+}
+
+/**
+ * Convert a base-unit integer amount (e.g. `10000n` cents) to the decimal string
+ * the quotes API and widget expect (e.g. `"100"`), at the asset's `decimals`.
+ * Truncates excess precision toward zero and emits no trailing zeros.
+ */
+export function toDecimalString(baseUnits: bigint | number | string, decimals: number): string {
+  return new BigNumber(baseUnits.toString())
+    .shiftedBy(-decimals)
+    .decimalPlaces(decimals, BigNumber.ROUND_DOWN)
+    .toFixed();
+}
+
+/**
+ * Sum a set of decimal amounts (e.g. network + transaction fees) and convert the
+ * total to a base-unit integer at `decimals`. Missing or non-finite entries
+ * count as zero so a partial fee payload never throws. Truncates toward zero.
+ */
+export function sumToBaseUnits(decimalAmounts: Array<number | string | undefined>, decimals: number): bigint {
+  const total = decimalAmounts.reduce<BigNumber>((acc, value) => {
+    const n = new BigNumber(value ?? 0);
+    return acc.plus(n.isFinite() ? n : 0);
+  }, new BigNumber(0));
+  return BigInt(total.shiftedBy(decimals).toFixed(0, BigNumber.ROUND_DOWN));
+}
+
+/**
+ * Coerce a WDK base/minor-unit amount (`number | bigint`) to a bigint. Amounts
+ * are whole base units, so a fractional, NaN or Infinity `number` is out of
+ * contract and fails with a typed OnramperError rather than a raw `RangeError`
+ * from `BigInt()` (quote path) or a silently truncated widget amount (buy/sell).
+ *
+ * @throws {OnramperError} `INVALID_ARGUMENT` for a non-integer number.
+ */
+export function toBaseUnitBigInt(amount: number | bigint): bigint {
+  if (typeof amount === 'bigint') {
+    return amount;
+  }
+  if (!Number.isInteger(amount)) {
+    throw new OnramperError(
+      OnramperErrorCode.INVALID_ARGUMENT,
+      `Amount must be a whole number of base/minor units; received ${amount}`,
+    );
+  }
+  return BigInt(amount);
+}

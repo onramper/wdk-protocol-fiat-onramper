@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { OnramperFiatProtocol } from '../src/index.ts';
-import type { FiatTxStatus } from '../src/types/wdk.ts';
+import type { FiatTransactionStatus } from '../src/types/wdk.ts';
 import { decodeProofPayload } from './dpop-helpers.ts';
-import { baseConfig, json, mockHttp, tokenRoute } from './helpers.ts';
+import { baseConfig, json, mockHttp, supportedRoute, tokenRoute } from './helpers.ts';
 
 const txRoute = {
   match: '/checkout/session/',
@@ -17,6 +17,7 @@ describe('happy paths not covered by the conformance suite', () => {
   it('quoteSell() hits /quotes/{crypto}/{fiat}?type=sell and maps the best quote', async () => {
     // sell flips source/destination vs buy: source = crypto, destination = fiat.
     const http = mockHttp([
+      supportedRoute,
       {
         match: '/quotes/eth/usd',
         handler: () => json(200, [{ rate: 3000, payout: 300, ramp: 'provider-b', paymentMethod: 'sepa' }]),
@@ -24,17 +25,18 @@ describe('happy paths not covered by the conformance suite', () => {
     ]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
-    const quote = await proto.quoteSell({ fiatCurrency: 'usd', cryptoAsset: 'eth', cryptoAmount: '0.1' });
-
-    expect(quote).toEqual({
-      direction: 'sell',
+    const quote = await proto.quoteSell({
       fiatCurrency: 'usd',
       cryptoAsset: 'eth',
-      fiatAmount: '300',
-      cryptoAmount: '0.1',
+      cryptoAmount: 100_000_000_000_000_000n, // 0.1 ETH
+    });
+
+    expect(quote).toEqual({
+      cryptoAmount: 100_000_000_000_000_000n, // exact, echoed from the request
+      fiatAmount: 30_000n, // 300 USD payout at 2 decimals
+      fee: 0n,
       rate: '3000',
-      paymentMethod: 'sepa',
-      provider: 'provider-b',
+      metadata: { provider: 'provider-b', paymentMethod: 'sepa' },
     });
     const call = http.calls.find((c) => c.url.includes('/quotes/eth/usd'));
     expect(call?.url).toBe('https://api-stg.onramper.com/quotes/eth/usd?type=sell&amount=0.1');
@@ -88,7 +90,7 @@ describe('happy paths not covered by the conformance suite', () => {
     expect(mints).toBe(1);
   });
 
-  it('the authenticated checkout call binds its DPoP proof to the exact request URL + access token', async () => {
+  it('the authenticated session call binds its DPoP proof to the exact request URL + access token', async () => {
     const http = mockHttp([tokenRoute, txRoute]);
     const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
 
@@ -150,7 +152,8 @@ describe('happy paths not covered by the conformance suite', () => {
   });
 
   describe('getTransactionDetail() status normalisation', () => {
-    const cases: Array<[string, FiatTxStatus]> = [
+    // Provider statuses collapse onto the WDK three-state vocabulary.
+    const cases: Array<[string, FiatTransactionStatus]> = [
       ['success', 'completed'],
       ['paid', 'completed'],
       ['completed', 'completed'],
@@ -158,12 +161,13 @@ describe('happy paths not covered by the conformance suite', () => {
       ['cancelled', 'failed'],
       ['canceled', 'failed'],
       ['failed', 'failed'],
-      ['expired', 'expired'],
-      ['in_progress', 'processing'],
-      ['inprogress', 'processing'],
-      ['new', 'pending'],
-      ['created', 'pending'],
-      ['weird_state', 'unknown'],
+      ['expired', 'failed'], // terminal: a lapsed ramp never completes
+      ['in_progress', 'in_progress'],
+      ['processing', 'in_progress'],
+      ['pending', 'in_progress'],
+      ['new', 'in_progress'],
+      ['created', 'in_progress'],
+      ['weird_state', 'in_progress'], // unknown defaults to in_progress
     ];
 
     it.each(cases)('maps provider status %s -> %s', async (rawStatus, expected) => {
@@ -187,6 +191,7 @@ describe('happy paths not covered by the conformance suite', () => {
   describe('quote selection and mapping', () => {
     it('skips errored entries and maps the first priced quote with all fee fields', async () => {
       const http = mockHttp([
+        supportedRoute,
         {
           match: '/quotes/usd/eth',
           handler: () =>
@@ -205,46 +210,52 @@ describe('happy paths not covered by the conformance suite', () => {
         },
       ]);
       const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
-      const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100 });
+      const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100_00n });
       expect(quote).toEqual({
-        direction: 'buy',
-        fiatCurrency: 'usd',
-        cryptoAsset: 'eth',
-        fiatAmount: '100',
-        cryptoAmount: '0.05',
+        fiatAmount: 100_00n,
+        cryptoAmount: 50_000_000_000_000_000n, // 0.05 ETH
+        fee: 300n, // (1 + 2) USD * 100
         rate: '2000',
-        networkFee: '1',
-        transactionFee: '2',
-        paymentMethod: 'creditcard',
-        provider: 'provider-b',
-        quoteId: 'q9',
+        metadata: {
+          provider: 'provider-b',
+          quoteId: 'q9',
+          paymentMethod: 'creditcard',
+          networkFee: '1',
+          transactionFee: '2',
+        },
       });
     });
 
     it('reads the alternative {quotes:[...]} wrapper shape', async () => {
       const http = mockHttp([
+        supportedRoute,
         { match: '/quotes/usd/eth', handler: () => json(200, { quotes: [{ rate: 1000, payout: 0.01, ramp: 'p' }] }) },
       ]);
       const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
-      const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100 });
-      expect(quote.provider).toBe('p');
+      const quote = await proto.quoteBuy({ fiatCurrency: 'usd', cryptoAsset: 'eth', fiatAmount: 100_00n });
+      expect(quote.metadata.provider).toBe('p');
       expect(quote.rate).toBe('1000');
-      expect(quote.cryptoAmount).toBe('0.01');
+      expect(quote.cryptoAmount).toBe(10_000_000_000_000_000n); // 0.01 ETH
     });
 
     it('echoes payout into fiatAmount for sell', async () => {
       const http = mockHttp([
+        supportedRoute,
         { match: '/quotes/eth/usd', handler: () => json(200, [{ rate: 3000, payout: 250, ramp: 'provider-b' }]) },
       ]);
       const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
-      const quote = await proto.quoteSell({ fiatCurrency: 'usd', cryptoAsset: 'eth', cryptoAmount: '0.08' });
-      expect(quote.fiatAmount).toBe('250');
-      expect(quote.cryptoAmount).toBe('0.08');
+      const quote = await proto.quoteSell({
+        fiatCurrency: 'usd',
+        cryptoAsset: 'eth',
+        cryptoAmount: 80_000_000_000_000_000n, // 0.08 ETH
+      });
+      expect(quote.fiatAmount).toBe(25_000n); // 250 USD
+      expect(quote.cryptoAmount).toBe(80_000_000_000_000_000n);
     });
   });
 
   describe('getTransactionDetail() field mapping', () => {
-    it('maps populated fields, coerces numbers to strings, and honours the ramp alias', async () => {
+    it('maps populated fields onto status/asset/currency + metadata, honouring the ramp alias', async () => {
       const http = mockHttp([
         tokenRoute,
         {
@@ -271,10 +282,13 @@ describe('happy paths not covered by the conformance suite', () => {
         status: 'completed',
         cryptoAsset: 'eth',
         fiatCurrency: 'usd',
-        fiatAmount: '100',
-        cryptoAmount: '0.033',
-        txHash: '0xdead',
-        provider: 'provider-b',
+        metadata: {
+          status: 'completed',
+          fiatAmount: '100',
+          cryptoAmount: '0.033',
+          txHash: '0xdead',
+          provider: 'provider-b',
+        },
       });
     });
 
@@ -288,7 +302,12 @@ describe('happy paths not covered by the conformance suite', () => {
       ]);
       const proto = new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() }));
       const detail = await proto.getTransactionDetail('s');
-      expect(detail).toEqual({ status: 'pending', cryptoAsset: '', fiatCurrency: '', provider: 'p' });
+      expect(detail).toEqual({
+        status: 'in_progress',
+        cryptoAsset: '',
+        fiatCurrency: '',
+        metadata: { status: 'pending', provider: 'p' },
+      });
     });
   });
 

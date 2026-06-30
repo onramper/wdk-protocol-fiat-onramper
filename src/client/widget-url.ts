@@ -1,54 +1,65 @@
+import { OnramperError, OnramperErrorCode } from '../errors/index.ts';
 import type { SignUrl, SignUrlParams } from '../types/onramper.ts';
-import type { BuyOptions, SellOptions } from '../types/wdk.ts';
-import { toOptionalString } from '../utils/coerce.ts';
+import type { OnramperRequestConfig } from '../types/wdk.ts';
 
 /**
- * buy()/sell() are pure signed-URL builders — no backend call, no session. We
- * assemble the widget params and hand them to the consumer's `signUrl` callback,
- * whose backend produces the signed widget URL. This mirrors the
- * MoonPay WDK protocol: partners already create signed URLs of ours.
+ * buy()/sell() hand off to the consumer's `signUrl` callback, whose backend
+ * builds and signs the widget URL (the signing key never reaches the client),
+ * mirroring @tetherto/wdk-protocol-fiat-moonpay. Amounts here are already decimal
+ * strings — the protocol converts the WDK base-unit inputs using each asset's
+ * decimals before calling in.
  */
+interface WidgetUrlInput {
+  fiatCurrency: string;
+  cryptoAsset: string;
+  /** Decimal amount string, already converted from base units. */
+  fiatAmount?: string;
+  cryptoAmount?: string;
+  /** Recipient (buy) or refund (sell) address; omitted when none is known. */
+  address?: string;
+  config?: OnramperRequestConfig;
+}
 
-/**
- * Builds the signed buy widget URL via the consumer's `signUrl` callback,
- * mapping `BuyOptions` to widget params (recipient → address). Returns the
- * signed widget URL.
- */
-export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, options: BuyOptions): Promise<string> {
-  const params: SignUrlParams = {
-    direction: 'buy',
+function toParams(direction: 'buy' | 'sell', apiKey: string, input: WidgetUrlInput): SignUrlParams {
+  return {
+    direction,
     apiKey,
-    fiatCurrency: options.fiatCurrency,
-    cryptoAsset: options.cryptoAsset,
-    networkCode: options.networkCode,
-    fiatAmount: toOptionalString(options.fiatAmount),
-    address: options.recipient,
-    memo: options.memo,
-    paymentMethod: options.paymentMethod,
-    country: options.country,
-    quoteId: options.quoteId,
+    fiatCurrency: input.fiatCurrency,
+    cryptoAsset: input.cryptoAsset,
+    fiatAmount: input.fiatAmount,
+    cryptoAmount: input.cryptoAmount,
+    address: input.address,
+    networkCode: input.config?.networkCode,
+    memo: input.config?.memo,
+    paymentMethod: input.config?.paymentMethod,
+    country: input.config?.country,
+    quoteId: input.config?.quoteId,
   };
-  return signUrl(params);
 }
 
 /**
- * Builds the signed sell widget URL via the consumer's `signUrl` callback,
- * mapping `SellOptions` to widget params (refundAddress → address). Returns the
- * signed widget URL.
+ * Invoke the partner `signUrl` callback, keeping the SDK's typed-error contract:
+ * a thrown `OnramperError` passes through; anything else (the partner backend's
+ * own failure) is wrapped as `UPSTREAM_ERROR`, preserving the cause — the same
+ * discipline applied to the `getSessionToken` callback.
  */
-export async function buildSellUrl(signUrl: SignUrl, apiKey: string, options: SellOptions): Promise<string> {
-  const params: SignUrlParams = {
-    direction: 'sell',
-    apiKey,
-    fiatCurrency: options.fiatCurrency,
-    cryptoAsset: options.cryptoAsset,
-    networkCode: options.networkCode,
-    cryptoAmount: toOptionalString(options.cryptoAmount),
-    address: options.refundAddress,
-    memo: options.memo,
-    paymentMethod: options.paymentMethod,
-    country: options.country,
-    quoteId: options.quoteId,
-  };
-  return signUrl(params);
+async function sign(signUrl: SignUrl, params: SignUrlParams): Promise<string> {
+  try {
+    return await signUrl(params);
+  } catch (err) {
+    if (err instanceof OnramperError) {
+      throw err;
+    }
+    throw new OnramperError(OnramperErrorCode.UPSTREAM_ERROR, 'The signUrl callback failed', { cause: err });
+  }
+}
+
+/** Builds the signed buy widget URL via the consumer's `signUrl` callback. */
+export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, input: WidgetUrlInput): Promise<string> {
+  return sign(signUrl, toParams('buy', apiKey, input));
+}
+
+/** Builds the signed sell widget URL via the consumer's `signUrl` callback. */
+export async function buildSellUrl(signUrl: SignUrl, apiKey: string, input: WidgetUrlInput): Promise<string> {
+  return sign(signUrl, toParams('sell', apiKey, input));
 }

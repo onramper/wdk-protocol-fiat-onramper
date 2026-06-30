@@ -1,10 +1,10 @@
-import type { FiatTransactionDetail, FiatTxStatus } from '../types/wdk.ts';
+import type { FiatTransactionStatus, OnramperTransactionDetail } from '../types/wdk.ts';
 import { toOptionalString } from '../utils/coerce.ts';
 
 /**
  * Shape from `GET /checkout/session/{sessionId}/transaction`: a `{valid,
  * transactionInformation}` envelope where `transactionInformation` is an open,
- * provider-specific record. The mapping is defensive: known aliases are tried
+ * provider-specific record. The mapping is defensive — known aliases are tried
  * in order and anything missing degrades rather than throws.
  */
 interface RawTransaction {
@@ -22,8 +22,15 @@ interface RawTransaction {
   onramp?: string;
 }
 
-/** Normalise provider-specific status strings into the WDK status vocabulary. */
-function normaliseStatus(raw: string | undefined): FiatTxStatus {
+/**
+ * Collapse provider status strings into the WDK's three states. Anything not
+ * explicitly succeeded or failed is treated as still in progress — matching
+ * @tetherto/wdk-protocol-fiat-moonpay's default, so a new in-flight status does
+ * not error a pollable transaction. The raw string is preserved under
+ * `metadata.status`, so an unmapped (possibly terminal) value stays inspectable.
+ * `expired` maps to `failed`: a lapsed ramp never completes.
+ */
+function normaliseStatus(raw: string | undefined): FiatTransactionStatus {
   switch ((raw ?? '').toLowerCase()) {
     case 'completed':
     case 'success':
@@ -33,37 +40,33 @@ function normaliseStatus(raw: string | undefined): FiatTxStatus {
     case 'declined':
     case 'cancelled':
     case 'canceled':
-      return 'failed';
     case 'expired':
-      return 'expired';
-    case 'pending':
-    case 'new':
-    case 'created':
-      return 'pending';
-    case 'processing':
-    case 'in_progress':
-    case 'inprogress':
-      return 'processing';
+      return 'failed';
     default:
-      return 'unknown';
+      return 'in_progress';
   }
 }
 
 /**
- * Maps a `GET /checkout/session/{sessionId}/transaction` envelope to a WDK
- * `FiatTransactionDetail`, normalising provider status and resolving field
- * aliases (crypto/cryptoAsset, fiat/fiatCurrency, provider/ramp/onramp).
+ * Map a `GET /checkout/session/{sessionId}/transaction` envelope onto the WDK
+ * `FiatTransactionDetail` (status + asset + currency), with the raw status, hash,
+ * provider and resolved amounts surfaced under `metadata`. Field aliases
+ * (crypto/cryptoAsset, fiat/fiatCurrency, provider/ramp/onramp) are resolved in
+ * order.
  */
-export function toFiatTransactionDetail(raw: unknown): FiatTransactionDetail {
+export function toFiatTransactionDetail(raw: unknown): OnramperTransactionDetail {
   const envelope = raw as { transactionInformation?: RawTransaction } | undefined;
   const tx = envelope?.transactionInformation ?? (raw as RawTransaction) ?? {};
   return {
     status: normaliseStatus(tx.status),
     cryptoAsset: tx.cryptoAsset ?? tx.crypto ?? '',
     fiatCurrency: tx.fiatCurrency ?? tx.fiat ?? '',
-    fiatAmount: toOptionalString(tx.fiatAmount),
-    cryptoAmount: toOptionalString(tx.cryptoAmount),
-    txHash: tx.txHash,
-    provider: tx.provider ?? tx.ramp ?? tx.onramp,
+    metadata: {
+      status: tx.status,
+      txHash: tx.txHash,
+      provider: tx.provider ?? tx.ramp ?? tx.onramp,
+      fiatAmount: toOptionalString(tx.fiatAmount),
+      cryptoAmount: toOptionalString(tx.cryptoAmount),
+    },
   };
 }
