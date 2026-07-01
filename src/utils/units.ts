@@ -5,6 +5,13 @@ import { OnramperError, OnramperErrorCode } from '../errors.ts';
  * Convert a provider's decimal amount (e.g. `"1.5"` ETH) to a base-unit integer
  * (e.g. `1500000000000000000n`) using the asset's on-chain / minor-unit
  * `decimals`. Truncates toward zero so rounding never over-credits the user.
+ *
+ * @param decimalAmount - The decimal amount, in major units.
+ * @param decimals - The asset's base-unit decimal places.
+ * @returns The amount as a base-unit integer.
+ * @throws {SyntaxError} When `decimalAmount` is missing, non-finite, or not
+ *   numeric (e.g. `"N/A"`) — `BigInt()` rejects the resulting `"NaN"` string.
+ *   Use {@link toBaseUnitsOrNull} to handle that case without a try/catch.
  */
 export function toBaseUnits(decimalAmount: number | string, decimals: number): bigint {
   return BigInt(new BigNumber(decimalAmount).shiftedBy(decimals).toFixed(0, BigNumber.ROUND_DOWN));
@@ -16,6 +23,10 @@ export function toBaseUnits(decimalAmount: number | string, decimals: number): b
  * so a caller can skip a degenerate quote rather than crash on `BigInt("NaN")`.
  * A finite sub-unit decimal still floors to `0n` — the caller decides whether `0`
  * is acceptable.
+ *
+ * @param value - The decimal amount, in major units, or `undefined`.
+ * @param decimals - The asset's base-unit decimal places.
+ * @returns The amount as a base-unit integer, or `null` if `value` can't be converted.
  */
 export function toBaseUnitsOrNull(value: number | string | undefined, decimals: number): bigint | null {
   if (value == null) {
@@ -32,6 +43,10 @@ export function toBaseUnitsOrNull(value: number | string | undefined, decimals: 
  * Convert a base-unit integer amount (e.g. `10000n` cents) to the decimal string
  * the quotes API and widget expect (e.g. `"100"`), at the asset's `decimals`.
  * Truncates excess precision toward zero and emits no trailing zeros.
+ *
+ * @param baseUnits - The base-unit amount.
+ * @param decimals - The asset's base-unit decimal places.
+ * @returns The decimal string, in major units.
  */
 export function toDecimalString(baseUnits: bigint | number | string, decimals: number): string {
   return new BigNumber(baseUnits.toString())
@@ -44,6 +59,10 @@ export function toDecimalString(baseUnits: bigint | number | string, decimals: n
  * Sum a set of decimal amounts (e.g. network + transaction fees) and convert the
  * total to a base-unit integer at `decimals`. Missing or non-finite entries
  * count as zero so a partial fee payload never throws. Truncates toward zero.
+ *
+ * @param decimalAmounts - The decimal amounts to sum, in major units.
+ * @param decimals - The fiat currency's minor-unit decimal places.
+ * @returns The summed amount as a base-unit integer.
  */
 export function sumToBaseUnits(decimalAmounts: (number | string | undefined)[], decimals: number): bigint {
   const total = decimalAmounts.reduce<BigNumber>((acc, value) => {
@@ -59,6 +78,8 @@ export function sumToBaseUnits(decimalAmounts: (number | string | undefined)[], 
  * contract and fails with a typed OnramperError rather than a raw `RangeError`
  * from `BigInt()` (quote path) or a silently truncated widget amount (buy/sell).
  *
+ * @param amount - The WDK base/minor-unit amount.
+ * @returns `amount` as a bigint.
  * @throws {OnramperError} `INVALID_ARGUMENT` for a non-integer number.
  */
 export function toBaseUnitBigInt(amount: number | bigint): bigint {

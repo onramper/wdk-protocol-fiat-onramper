@@ -3,10 +3,19 @@ export class TtlCache<T> {
   private value?: T;
   private expiresAt = 0;
 
-  /** @param ttlMs - Lifetime of a stored value, in milliseconds. */
+  /**
+   * Creates an empty cache with a fixed TTL.
+   *
+   * @param ttlMs - Lifetime of a stored value, in milliseconds.
+   */
   constructor(private readonly ttlMs: number) {}
 
-  /** Returns the cached value, or `undefined` once the TTL has elapsed or nothing has been stored. Expiry is evaluated lazily on read. */
+  /**
+   * Returns the cached value, or `undefined` once the TTL has elapsed or
+   * nothing has been stored. Expiry is evaluated lazily on read.
+   *
+   * @returns The cached value, or `undefined` if expired or unset.
+   */
   get(): T | undefined {
     if (this.value !== undefined && Date.now() < this.expiresAt) {
       return this.value;
@@ -14,7 +23,11 @@ export class TtlCache<T> {
     return undefined;
   }
 
-  /** Stores `value` and restarts the TTL window from now. */
+  /**
+   * Stores `value` and restarts the TTL window from now.
+   *
+   * @param value - The value to cache.
+   */
   set(value: T): void {
     this.value = value;
     this.expiresAt = Date.now() + this.ttlMs;

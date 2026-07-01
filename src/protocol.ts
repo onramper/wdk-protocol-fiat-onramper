@@ -36,29 +36,33 @@ import { toBaseUnitBigInt, toDecimalString } from './utils/units.ts';
 
 type WdkAccount = IWalletAccount | IWalletAccountReadOnly;
 
-/** The WDK amount XOR before it's resolved to a single side. */
-interface AmountInput {
-  cryptoAmount?: number | bigint;
-  fiatAmount?: number | bigint;
-}
+/**
+ * The WDK amount XOR before it's resolved to a single side. Mirrors the
+ * `?: never` XOR the WDK's own `Buy`/`SellOptions` use, so a caller can't
+ * supply both amounts.
+ */
+type AmountInput =
+  | { cryptoAmount: number | bigint; fiatAmount?: never }
+  | { fiatAmount: number | bigint; cryptoAmount?: never };
 
 /** The WDK amount XOR resolved to a single side and its value. */
 interface AmountSelection {
+  /** Which amount field the caller populated. */
   side: 'crypto' | 'fiat';
+  /** The base/minor-unit amount from that field. */
   value: number | bigint;
 }
 
 /** A pair's crypto + fiat decimals, resolved from the supported payload. */
 interface AssetDecimals {
+  /** On-chain base-unit decimals for the crypto asset. */
   cryptoDecimals: number;
+  /** Minor-unit decimals for the fiat currency. */
   fiatDecimals: number;
 }
 
-/** Decimal amount strings in the widget's expected form, on the side the caller specified. */
-interface WidgetAmounts {
-  fiatAmount?: string;
-  cryptoAmount?: string;
-}
+/** Decimal amount string in the widget's expected form, on the side the caller specified. */
+type WidgetAmounts = { fiatAmount: string; cryptoAmount?: never } | { cryptoAmount: string; fiatAmount?: never };
 
 /**
  * Onramper's WDK fiat protocol — extends `FiatProtocol` from
@@ -83,6 +87,13 @@ export class OnramperFiatProtocol extends FiatProtocol {
   private readonly supportedCache: TtlCache<unknown>;
   private readonly countriesCache: TtlCache<unknown>;
 
+  /**
+   * Creates an Onramper fiat protocol instance.
+   *
+   * @param account - The wallet account to bind, used for the default recipient/refund address.
+   * @param config - Onramper-specific configuration (apiKey, signUrl, environment, adapters).
+   * @throws {OnramperError} `INVALID_CONFIG` when `config` fails validation (see `validateConfig`).
+   */
   constructor(account: WdkAccount | undefined, config: OnramperFiatConfig) {
     super(account);
     this.config = validateConfig(config);
@@ -119,6 +130,8 @@ export class OnramperFiatProtocol extends FiatProtocol {
   /**
    * Prices a buy: spend an exact `fiatAmount` (fiat minor units) to receive crypto.
    *
+   * @param options - The exact-fiat-spend buy quote request.
+   * @returns The priced quote, with Onramper's provider/fee data under `metadata`.
    * @throws {OnramperError} `INVALID_ARGUMENT` if both amounts or a non-integer
    *   amount are given; `UNSUPPORTED_OPERATION` if only `cryptoAmount` is given
    *   (Onramper prices buys by fiat spend, not an exact crypto target);
@@ -143,6 +156,8 @@ export class OnramperFiatProtocol extends FiatProtocol {
   /**
    * Prices a sell: sell an exact `cryptoAmount` (base units) for fiat.
    *
+   * @param options - The exact-crypto-amount sell quote request.
+   * @returns The priced quote, with Onramper's provider/fee data under `metadata`.
    * @throws {OnramperError} `INVALID_ARGUMENT` if both amounts or a non-integer
    *   amount are given; `UNSUPPORTED_OPERATION` if only `fiatAmount` is given;
    *   `UNSUPPORTED_ASSET` for an unknown pair; `QUOTE_UNAVAILABLE` when no priced
@@ -171,6 +186,12 @@ export class OnramperFiatProtocol extends FiatProtocol {
   /**
    * Builds a signed buy widget URL via `config.signUrl`. The recipient defaults
    * to the wallet account's address when omitted.
+   *
+   * @param options - The buy widget request (exact fiat spend or exact crypto target).
+   * @returns The signed buy widget URL.
+   * @throws {OnramperError} `INVALID_ARGUMENT` if both amounts or a non-integer
+   *   amount are given, or neither is given; `UNSUPPORTED_ASSET` for an unknown
+   *   pair; `UPSTREAM_ERROR` if `config.signUrl` throws.
    */
   async buy(options: OnramperBuyOptions): Promise<BuyResult> {
     const amounts = await this.toWidgetAmounts(options);
@@ -186,7 +207,15 @@ export class OnramperFiatProtocol extends FiatProtocol {
     };
   }
 
-  /** Builds a signed sell widget URL via `config.signUrl`. The refund address defaults to the account's. */
+  /**
+   * Builds a signed sell widget URL via `config.signUrl`. The refund address defaults to the account's.
+   *
+   * @param options - The sell widget request (exact crypto amount or exact fiat target).
+   * @returns The signed sell widget URL.
+   * @throws {OnramperError} `INVALID_ARGUMENT` if both amounts or a non-integer
+   *   amount are given, or neither is given; `UNSUPPORTED_ASSET` for an unknown
+   *   pair; `UPSTREAM_ERROR` if `config.signUrl` throws.
+   */
   async sell(options: OnramperSellOptions): Promise<SellResult> {
     const amounts = await this.toWidgetAmounts(options);
     const address = options.refundAddress ?? (await this.accountAddress());
@@ -206,7 +235,9 @@ export class OnramperFiatProtocol extends FiatProtocol {
    * `getSessionToken` in the config; Onramper resolves buy vs sell server-side.
    *
    * @param txId - The session id returned by the intent call.
-   * @throws {OnramperError} `INVALID_CONFIG` when `getSessionToken` was not supplied.
+   * @returns The transaction detail, with the raw status/hash/provider under `metadata`.
+   * @throws {OnramperError} `INVALID_CONFIG` when `getSessionToken` was not
+   *   supplied; otherwise mapped from the session call (see `AuthorizedClient.getWithSession`).
    */
   async getTransactionDetail(txId: string): Promise<OnramperTransactionDetail> {
     if (typeof this.config.getSessionToken !== 'function') {
@@ -219,17 +250,32 @@ export class OnramperFiatProtocol extends FiatProtocol {
     return toFiatTransactionDetail(raw);
   }
 
-  /** Public data endpoint; the `GET /supported` payload is TTL-cached and shared with `getSupportedFiatCurrencies`. */
+  /**
+   * Public data endpoint; the `GET /supported` payload is TTL-cached and shared with `getSupportedFiatCurrencies`.
+   *
+   * @returns The supported crypto assets.
+   * @throws {OnramperError} Mapped from a non-2xx response (see `OnramperErrorCode`).
+   */
   async getSupportedCryptoAssets(): Promise<SupportedCryptoAsset[]> {
     return toSupportedCryptoAssets(await this.fetchSupported());
   }
 
-  /** Public data endpoint; reuses the same TTL-cached `GET /supported` payload as `getSupportedCryptoAssets`. */
+  /**
+   * Public data endpoint; reuses the same TTL-cached `GET /supported` payload as `getSupportedCryptoAssets`.
+   *
+   * @returns The supported fiat currencies.
+   * @throws {OnramperError} Mapped from a non-2xx response (see `OnramperErrorCode`).
+   */
   async getSupportedFiatCurrencies(): Promise<SupportedFiatCurrency[]> {
     return toSupportedFiatCurrencies(await this.fetchSupported());
   }
 
-  /** Public data endpoint; the country list is TTL-cached separately from the supported-assets payload. */
+  /**
+   * Public data endpoint; the country list is TTL-cached separately from the supported-assets payload.
+   *
+   * @returns The supported countries.
+   * @throws {OnramperError} Mapped from a non-2xx response (see `OnramperErrorCode`).
+   */
   async getSupportedCountries(): Promise<SupportedCountry[]> {
     return toSupportedCountries(await this.cached(this.countriesCache, this.endpoints.supportedCountries()));
   }
@@ -300,6 +346,7 @@ export class OnramperFiatProtocol extends FiatProtocol {
       : { fiatAmount: toDecimalString(base, fiatDecimals) };
   }
 
+  /** Read-through TTL cache over the `GET /supported` payload, shared by the crypto/fiat list methods. */
   private fetchSupported(): Promise<unknown> {
     return this.cached(this.supportedCache, this.endpoints.supported());
   }
@@ -315,6 +362,7 @@ export class OnramperFiatProtocol extends FiatProtocol {
     return raw;
   }
 
+  /** Builds and issues the `GET /quotes/{source}/{destination}` call with the direction/amount/config query params. */
   private async fetchQuote(
     type: FiatDirection,
     source: string,

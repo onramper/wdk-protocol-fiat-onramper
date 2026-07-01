@@ -1,7 +1,9 @@
 import { OnramperError, OnramperErrorCode } from '../../errors.ts';
-import type { CryptoAdapter, Es256KeyHandle } from '../types.ts';
+import type { CryptoAdapter, ES256KeyHandle } from '../types.ts';
 
 /**
+ * Resolves the runtime's `SubtleCrypto` instance.
+ *
  * @throws {OnramperError} `INVALID_CONFIG` when the runtime exposes no
  *   `crypto.subtle` and no override was supplied via `config.adapters.crypto`.
  */
@@ -25,17 +27,19 @@ function getSubtle(): SubtleCrypto {
  */
 export function createWebCryptoAdapter(): CryptoAdapter {
   return {
-    async generateEs256KeyPair(): Promise<Es256KeyHandle> {
+    /** Generates the key pair with the private key marked non-extractable — see the class doc above. */
+    async generateEs256KeyPair(): Promise<ES256KeyHandle> {
       const pair = await getSubtle().generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
       return { privateKey: pair.privateKey, publicKey: pair.publicKey };
     },
 
-    async exportPublicJwk(handle: Es256KeyHandle): Promise<JsonWebKey> {
+    /** Exports the public half of `handle` as a JWK; the private key stays opaque. */
+    async exportPublicJwk(handle: ES256KeyHandle): Promise<JsonWebKey> {
       return getSubtle().exportKey('jwk', handle.publicKey as CryptoKey);
     },
 
-    async signEs256(handle: Es256KeyHandle, data: Uint8Array): Promise<Uint8Array> {
-      // WebCrypto ECDSA emits the raw IEEE-P1363 r||s signature JOSE expects.
+    /** Signs `data`, converting WebCrypto's raw IEEE-P1363 r||s output (already JOSE-compatible) to bytes. */
+    async signEs256(handle: ES256KeyHandle, data: Uint8Array): Promise<Uint8Array> {
       const sig = await getSubtle().sign(
         { name: 'ECDSA', hash: 'SHA-256' },
         handle.privateKey as CryptoKey,
@@ -44,6 +48,7 @@ export function createWebCryptoAdapter(): CryptoAdapter {
       return new Uint8Array(sig);
     },
 
+    /** Digests `data` with SHA-256. */
     async sha256(data: Uint8Array): Promise<Uint8Array> {
       const digest = await getSubtle().digest('SHA-256', data as BufferSource);
       return new Uint8Array(digest);

@@ -1,7 +1,7 @@
 export type {
   Adapters,
   CryptoAdapter,
-  Es256KeyHandle,
+  ES256KeyHandle,
   FingerprintAdapter,
   HttpAdapter,
   HttpRequest,
@@ -17,6 +17,7 @@ export type {
   OnramperChannel,
   OnramperEnvironment,
   OnramperFiatConfig,
+  SessionTokenResult,
   SignUrl,
   SignUrlParams,
 } from './types/onramper.ts';

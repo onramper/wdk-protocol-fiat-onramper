@@ -10,30 +10,43 @@ export type OnramperEnvironment = 'production' | 'sandbox' | 'staging';
  */
 export type OnramperChannel = 'wdk-web' | 'wdk-node';
 
+/** The widget amount, on whichever side the caller specified — already a decimal string. */
+type SignUrlAmount = { fiatAmount: string; cryptoAmount?: never } | { cryptoAmount: string; fiatAmount?: never };
+
 /**
  * Parameters handed to the consumer's `signUrl` callback for buy/sell. These are
  * the widget query params; the consumer's backend produces a signed
  * widget URL from them (the signing key never reaches the client).
  */
-export interface SignUrlParams {
+export type SignUrlParams = {
+  /** Whether this is a buy or sell widget URL. */
   direction: 'buy' | 'sell';
+  /**
+   * The same publishable key as `OnramperFiatConfig.apiKey`, echoed here so the
+   * partner's backend knows which signing credential to sign the URL with —
+   * it is not a distinct key from the config's.
+   */
   apiKey: string;
+  /** The currency's ISO 4217 code (e.g. 'USD'). */
   fiatCurrency: string;
+  /** The provider-specific code of the crypto asset. */
   cryptoAsset: string;
+  /** Network/chain code when the crypto asset spans several chains. */
   networkCode?: string;
-  fiatAmount?: string;
-  cryptoAmount?: string;
   /**
    * Recipient (buy) or refund (sell) address. Omitted when neither a recipient
    * nor a wallet account is supplied — the widget then prompts for one.
    */
   address?: string;
+  /** Destination memo/tag for chains that require one. */
   memo?: string;
+  /** Preferred payment (buy) or payout (sell) method. */
   paymentMethod?: string;
+  /** ISO-3166 country used for availability and pricing. */
   country?: string;
   /** Pins the widget to a specific quote when the caller passed one. */
   quoteId?: string;
-}
+} & SignUrlAmount;
 
 /**
  * Consumer-provided callback that returns a signed widget URL.
@@ -41,6 +54,14 @@ export interface SignUrlParams {
  * partner's backend; the SDK never holds the signing secret.
  */
 export type SignUrl = (params: SignUrlParams) => Promise<string>;
+
+/** The session token and id minted by {@link GetSessionToken}. */
+export interface SessionTokenResult {
+  /** The session id the partner backend issued alongside the token. */
+  sessionId: string;
+  /** The opaque `st_` session token used to bootstrap the SDK session. */
+  sessionToken: string;
+}
 
 /**
  * Consumer-provided callback that mints an SDK session token via the partner's
@@ -50,7 +71,7 @@ export type SignUrl = (params: SignUrlParams) => Promise<string>;
  * The token is single-use for binding, so a fresh one is needed each bootstrap —
  * hence a callback, not a string.
  */
-export type GetSessionToken = () => Promise<{ sessionId: string; sessionToken: string }>;
+export type GetSessionToken = () => Promise<SessionTokenResult>;
 
 /**
  * Configuration for an Onramper fiat protocol instance: partner key, the

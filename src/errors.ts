@@ -68,13 +68,32 @@ export const REBOOTSTRAP_CODES: ReadonlySet<OnramperErrorCode> = new Set([
   OnramperErrorCode.INVALID_GRANT,
 ]);
 
-/** Single error type surfaced to consumers, carrying the normalised code. */
+/** Optional context for an {@link OnramperError}. */
+export interface OnramperErrorOptions {
+  /** Upstream HTTP status, when the error came from a response. */
+  httpStatus?: number;
+  /** The underlying error, when this error wraps a lower-level failure (e.g. a network or partner-callback throw). */
+  cause?: unknown;
+}
+
+/**
+ * Single error type surfaced to consumers, carrying the normalised
+ * {@link OnramperErrorCode}. Every throw from this SDK — validation, transport,
+ * decode, or a mapped API error — is an `OnramperError`, so callers only ever
+ * need one `catch`/`instanceof` check.
+ */
 export class OnramperError extends Error {
+  /** Normalised error code; stable across API wording changes (see `OnramperErrorCode`). */
   readonly code: OnramperErrorCode;
   /** Upstream HTTP status when the error came from a response; absent for transport/decode failures (NETWORK_ERROR, DECODE_ERROR). */
   readonly httpStatus?: number;
 
-  constructor(code: OnramperErrorCode, message: string, options?: { httpStatus?: number; cause?: unknown }) {
+  /**
+   * @param code - The normalised error code.
+   * @param message - A human-readable description of the failure.
+   * @param options - Optional HTTP status and/or wrapped cause.
+   */
+  constructor(code: OnramperErrorCode, message: string, options?: OnramperErrorOptions) {
     super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'OnramperError';
     this.code = code;
@@ -82,17 +101,29 @@ export class OnramperError extends Error {
   }
 }
 
+/** Error body shape from the checkout/data API. */
 interface CheckoutErrorBody {
+  /** Numeric API error code; looked up in `CHECKOUT_ERROR_CODES`. */
   errorCode?: number;
+  /** Human-readable message from the API, used verbatim when present. */
   errorMessage?: string;
 }
 
+/** RFC 6749 error body shape from the token endpoint. */
 interface OAuthErrorBody {
+  /** RFC 6749 error identifier; looked up in `OAUTH_ERROR_CODES`. */
   error?: string;
+  /** Optional human-readable detail accompanying `error`. */
   error_description?: string;
 }
 
-/** Map an API `{ errorCode, errorMessage }` body to an OnramperError. */
+/**
+ * Map an API `{ errorCode, errorMessage }` body to an OnramperError.
+ *
+ * @param httpStatus - The response's HTTP status.
+ * @param body - The parsed response body, or `undefined` if it wasn't JSON.
+ * @returns An `OnramperError` with the normalised code and the API's message.
+ */
 export function mapCheckoutError(httpStatus: number, body: unknown): OnramperError {
   const parsed = (body ?? {}) as CheckoutErrorBody;
   const code =
@@ -101,7 +132,13 @@ export function mapCheckoutError(httpStatus: number, body: unknown): OnramperErr
   return new OnramperError(code, parsed.errorMessage ?? `Request failed with status ${httpStatus}`, { httpStatus });
 }
 
-/** Map a token endpoint RFC 6749 `{ error, error_description }` body to an OnramperError. */
+/**
+ * Map a token endpoint RFC 6749 `{ error, error_description }` body to an OnramperError.
+ *
+ * @param httpStatus - The response's HTTP status.
+ * @param body - The parsed response body, or `undefined` if it wasn't JSON.
+ * @returns An `OnramperError` with the normalised code and the API's error description.
+ */
 export function mapOAuthError(httpStatus: number, body: unknown): OnramperError {
   const parsed = (body ?? {}) as OAuthErrorBody;
   const code = (parsed.error ? OAUTH_ERROR_CODES[parsed.error] : undefined) ?? OnramperErrorCode.UPSTREAM_ERROR;

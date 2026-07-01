@@ -7,6 +7,8 @@ import type { HttpAdapter, HttpRequest, HttpResponse } from '../types.ts';
  * HTTP status interpretation is left to callers (they know which wire format the
  * endpoint speaks).
  *
+ * @param fetchImpl - The `fetch` implementation to use (default: the global `fetch`).
+ * @returns An `HttpAdapter` backed by `fetchImpl`.
  * @throws {OnramperError} `INVALID_CONFIG` when no global `fetch` exists and
  *   no override was supplied via `config.adapters.http`.
  */
@@ -18,6 +20,14 @@ export function createFetchHttpAdapter(fetchImpl: typeof fetch = globalThis.fetc
     );
   }
   return {
+    /**
+     * Performs one HTTP request via `fetchImpl`, disallowing redirects.
+     *
+     * @param req - The request to send.
+     * @returns The raw response.
+     * @throws {OnramperError} `NETWORK_ERROR` when the underlying `fetch` call
+     *   rejects (DNS/TLS/connection failure, or a disallowed redirect).
+     */
     async request(req: HttpRequest): Promise<HttpResponse> {
       let response: Response;
       try {

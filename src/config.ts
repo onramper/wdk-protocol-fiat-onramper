@@ -29,10 +29,21 @@ export const ENVIRONMENT_URLS: Readonly<Record<OnramperEnvironment, EnvUrls>> = 
 const ENVIRONMENTS: ReadonlySet<OnramperEnvironment> = new Set(['production', 'sandbox', 'staging']);
 const CHANNELS: ReadonlySet<string> = new Set(['wdk-web', 'wdk-node']);
 
+/**
+ * Throws the SDK's one config-validation error, naming the offending field.
+ *
+ * @param detail - The `field: reason` description of what failed validation.
+ */
 function fail(detail: string): never {
   throw new OnramperError(OnramperErrorCode.INVALID_CONFIG, `Invalid OnramperFiatConfig — ${detail}`);
 }
 
+/**
+ * Checks whether `value` parses as a URL.
+ *
+ * @param value - The string to check.
+ * @returns Whether `value` is a valid URL.
+ */
 function isValidUrl(value: string): boolean {
   try {
     new URL(value);
@@ -48,6 +59,8 @@ function isValidUrl(value: string): boolean {
  * the input unchanged on success (callback/adapter references are preserved).
  * Callbacks and adapters are validated as "is a function/object", not by shape.
  *
+ * @param config - The consumer-supplied config, unvalidated.
+ * @returns `config`, unchanged, once every field passes validation.
  * @throws {OnramperError} With code `OnramperErrorCode.INVALID_CONFIG` when a
  *   field is missing or malformed; the message names the offending field.
  */

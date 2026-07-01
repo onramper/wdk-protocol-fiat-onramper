@@ -8,6 +8,8 @@ import type { StorageAdapter } from '../types.ts';
  * let consumers opt into persistence by injecting their own adapter (e.g.
  * AsyncStorage / SecureStore on RN). Tokens are short-lived and the DPoP key is
  * non-extractable, so an in-memory session is the safe baseline.
+ *
+ * @returns A storage adapter backed by a process-local `Map`.
  */
 export function createMemoryStorageAdapter(): StorageAdapter {
   const store = new Map<string, string>();

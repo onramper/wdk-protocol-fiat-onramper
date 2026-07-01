@@ -58,7 +58,10 @@ export interface OnramperRequestConfig {
   quoteId?: string;
 }
 
+/** The WDK `BuyOptions` XOR plus Onramper's widget/quote knobs under `config`. */
 export type OnramperBuyOptions = BuyOptions & { config?: OnramperRequestConfig };
+
+/** The WDK `SellOptions` XOR plus Onramper's widget/quote knobs under `config`. */
 export type OnramperSellOptions = SellOptions & { config?: OnramperRequestConfig };
 
 /**
@@ -81,8 +84,11 @@ export type OnramperQuoteSellOptions = Omit<SellCommonOptions, 'refundAddress'> 
  * WDK `FiatQuote` carries.
  */
 export interface OnramperQuoteMetadata {
+  /** The provider's quote id; pass it back as `config.quoteId` to pin a later buy/sell to this price. */
   quoteId?: string;
+  /** The quoting provider's name. */
   provider?: string;
+  /** The payment (buy) or payout (sell) method this quote applies to. */
   paymentMethod?: string;
   /** Provider network fee as a major-unit decimal string (e.g. "0.50" USD) — NOT the base-unit `fee` bigint on FiatQuote. */
   networkFee?: string;
@@ -97,7 +103,9 @@ export type OnramperFiatQuote = FiatQuote & { metadata: OnramperQuoteMetadata };
 export interface OnramperTransactionMetadata {
   /** The raw provider status string, before normalisation to the WDK 3-state. */
   status?: string;
+  /** On-chain transaction hash, once settled. */
   txHash?: string;
+  /** The provider that processed the transaction. */
   provider?: string;
   /** Provider-reported fiat amount as a major-unit decimal string (e.g. "100.00"), not minor units. */
   fiatAmount?: string;

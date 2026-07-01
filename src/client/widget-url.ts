@@ -9,31 +9,46 @@ import type { OnramperRequestConfig } from '../types/wdk.ts';
  * strings — the protocol converts the WDK base-unit inputs using each asset's
  * decimals before calling in.
  */
-interface WidgetUrlInput {
+
+/** The widget amount, on whichever side the caller specified — decimal strings, already converted from base units. */
+type WidgetUrlAmount = { fiatAmount: string; cryptoAmount?: never } | { cryptoAmount: string; fiatAmount?: never };
+
+/** Common (non-amount) fields for a buy/sell widget URL. */
+type WidgetUrlCommon = {
+  /** The currency's ISO 4217 code (e.g. 'USD'). */
   fiatCurrency: string;
+  /** The provider-specific code of the crypto asset. */
   cryptoAsset: string;
-  /** Decimal amount string, already converted from base units. */
-  fiatAmount?: string;
-  cryptoAmount?: string;
   /** Recipient (buy) or refund (sell) address; omitted when none is known. */
   address?: string;
+  /** Onramper-specific widget knobs (network, payment method, country, memo, pinned quote). */
   config?: OnramperRequestConfig;
-}
+};
 
+type WidgetUrlInput = WidgetUrlCommon & WidgetUrlAmount;
+
+/**
+ * Builds the `SignUrlParams` the consumer's `signUrl` callback receives.
+ *
+ * @param direction - Whether this is a buy or sell widget URL.
+ * @param apiKey - The publishable partner API key.
+ * @param input - The widget parameters resolved by the protocol layer.
+ * @returns The parameters to hand to `signUrl`.
+ */
 function toParams(direction: 'buy' | 'sell', apiKey: string, input: WidgetUrlInput): SignUrlParams {
+  const { fiatAmount, cryptoAmount } = input;
   return {
     direction,
     apiKey,
     fiatCurrency: input.fiatCurrency,
     cryptoAsset: input.cryptoAsset,
-    fiatAmount: input.fiatAmount,
-    cryptoAmount: input.cryptoAmount,
     address: input.address,
     networkCode: input.config?.networkCode,
     memo: input.config?.memo,
     paymentMethod: input.config?.paymentMethod,
     country: input.config?.country,
     quoteId: input.config?.quoteId,
+    ...(fiatAmount !== undefined ? { fiatAmount } : { cryptoAmount: cryptoAmount as string }),
   };
 }
 
@@ -42,6 +57,12 @@ function toParams(direction: 'buy' | 'sell', apiKey: string, input: WidgetUrlInp
  * a thrown `OnramperError` passes through; anything else (the partner backend's
  * own failure) is wrapped as `UPSTREAM_ERROR`, preserving the cause — the same
  * discipline applied to the `getSessionToken` callback.
+ *
+ * @param signUrl - The consumer's signing callback.
+ * @param params - The widget parameters to sign.
+ * @returns The signed widget URL.
+ * @throws {OnramperError} Passes through a thrown `OnramperError` unchanged;
+ *   wraps any other thrown value as `UPSTREAM_ERROR`.
  */
 async function sign(signUrl: SignUrl, params: SignUrlParams): Promise<string> {
   try {
@@ -54,12 +75,28 @@ async function sign(signUrl: SignUrl, params: SignUrlParams): Promise<string> {
   }
 }
 
-/** Builds the signed buy widget URL via the consumer's `signUrl` callback. */
+/**
+ * Builds the signed buy widget URL via the consumer's `signUrl` callback.
+ *
+ * @param signUrl - The consumer's signing callback.
+ * @param apiKey - The publishable partner API key.
+ * @param input - The buy widget parameters resolved by the protocol layer.
+ * @returns The signed buy widget URL.
+ * @throws {OnramperError} See {@link sign}.
+ */
 export async function buildBuyUrl(signUrl: SignUrl, apiKey: string, input: WidgetUrlInput): Promise<string> {
   return sign(signUrl, toParams('buy', apiKey, input));
 }
 
-/** Builds the signed sell widget URL via the consumer's `signUrl` callback. */
+/**
+ * Builds the signed sell widget URL via the consumer's `signUrl` callback.
+ *
+ * @param signUrl - The consumer's signing callback.
+ * @param apiKey - The publishable partner API key.
+ * @param input - The sell widget parameters resolved by the protocol layer.
+ * @returns The signed sell widget URL.
+ * @throws {OnramperError} See {@link sign}.
+ */
 export async function buildSellUrl(signUrl: SignUrl, apiKey: string, input: WidgetUrlInput): Promise<string> {
   return sign(signUrl, toParams('sell', apiKey, input));
 }

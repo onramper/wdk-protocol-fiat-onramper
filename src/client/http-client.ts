@@ -7,9 +7,13 @@ import { buildEnvelopeHeaders, newNonce, readDpopNonce } from './headers.ts';
 import type { SessionManager } from './session-manager.ts';
 
 interface AuthorizedClientDeps {
+  /** Platform adapters used for signing and transport. */
   adapters: Adapters;
+  /** Owns access-token bootstrap/refresh and the DPoP key. */
   session: SessionManager;
+  /** Publishable partner API key. */
   apiKey: string;
+  /** Client channel reported on session-gated calls. */
   channel: OnramperChannel;
 }
 
@@ -22,9 +26,21 @@ interface AuthorizedClientDeps {
  *     invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
  */
 export class AuthorizedClient {
+  /**
+   * Creates a client bound to its collaborators.
+   *
+   * @param deps - The client's collaborators (adapters, session manager, credentials).
+   */
   constructor(private readonly deps: AuthorizedClientDeps) {}
 
-  /** @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`). */
+  /**
+   * Issues a GET authenticated by the publishable apiKey alone, for the public
+   * data endpoints (supported, quotes).
+   *
+   * @param url - The endpoint URL to GET.
+   * @returns The parsed JSON response body.
+   * @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`).
+   */
   async getWithApiKey<T>(url: string): Promise<T> {
     const res = await this.deps.adapters.http.request({
       method: 'GET',
@@ -37,7 +53,18 @@ export class AuthorizedClient {
     throw mapCheckoutError(res.status, safeJsonBody(res.body));
   }
 
-  /** @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`) after the session-refresh and DPoP-nonce retries are exhausted. */
+  /**
+   * Issues a GET authenticated by the full SDK session envelope (access token +
+   * DPoP), for the checkout session API. Recovers once from an expired session
+   * (401 → invalidate + refresh) and once from a DPoP nonce challenge, then
+   * gives up.
+   *
+   * @param url - The endpoint URL to GET.
+   * @returns The parsed JSON response body.
+   * @throws {OnramperError} Mapped from the non-2xx response (see
+   *   `OnramperErrorCode`) after the session-refresh and DPoP-nonce retries are
+   *   exhausted.
+   */
   async getWithSession<T>(url: string): Promise<T> {
     let allowSessionRetry = true;
     let dpopNonce: string | undefined;

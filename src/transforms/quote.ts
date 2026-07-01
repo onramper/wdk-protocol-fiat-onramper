@@ -11,19 +11,29 @@ import { sumToBaseUnits, toBaseUnitsOrNull } from '../utils/units.ts';
  * (crypto received on a buy, fiat received on a sell).
  */
 interface RawQuote {
+  /** Provider-issued quote id; pins a later buy/sell to this exact price via `config.quoteId`. */
   quoteId?: string;
+  /** The quoting provider's name. */
   ramp?: string;
+  /** Exchange rate, as reported by the provider. */
   rate?: number | string;
+  /** Provider network fee, in major units of the fiat currency. */
   networkFee?: number | string;
+  /** Provider transaction fee, in major units of the fiat currency. */
   transactionFee?: number | string;
+  /** Decimal amount on the side opposite the request (crypto received on a buy, fiat received on a sell). */
   payout?: number | string;
+  /** The payment (buy) or payout (sell) method this quote applies to. */
   paymentMethod?: string;
+  /** Present and non-empty when the provider couldn't price this entry; such entries are skipped. */
   errors?: unknown[];
 }
 
 /** The caller's exact request side and the asset decimals needed to scale the provider's `payout`. */
 interface QuoteContext {
+  /** Minor-unit decimals for the fiat currency. */
   fiatDecimals: number;
+  /** On-chain base-unit decimals for the crypto asset. */
   cryptoDecimals: number;
   /** The exact base-unit amount the caller specified. */
   requestedBaseUnits: bigint;
@@ -38,6 +48,9 @@ interface QuoteContext {
  * caller's base-unit input); the opposite side is the provider `payout` converted
  * at that asset's decimals.
  *
+ * @param raw - The raw quotes-endpoint response body (an array, or an object with a `quotes` array).
+ * @param context - The caller's requested side/amount and the pair's decimals.
+ * @returns The best available quote, mapped onto the WDK `FiatQuote` shape.
  * @throws {OnramperError} `QUOTE_UNAVAILABLE` when no error-free entry yields a
  *   positive whole base-unit payout.
  */

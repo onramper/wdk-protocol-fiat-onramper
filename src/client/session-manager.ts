@@ -1,4 +1,4 @@
-import type { Adapters, Es256KeyHandle } from '../adapters/types.ts';
+import type { Adapters, ES256KeyHandle } from '../adapters/types.ts';
 import { mapOAuthError, OnramperError, OnramperErrorCode, REBOOTSTRAP_CODES } from '../errors.ts';
 import type { GetSessionToken, OnramperChannel } from '../types/onramper.ts';
 import { parseJsonBody, safeJsonBody } from '../utils/format.ts';
@@ -10,18 +10,54 @@ import { newNonce, readDpopNonce } from './headers.ts';
 const PROACTIVE_REFRESH_SKEW_SEC = 60;
 
 interface TokenResponse {
+  /** The bearer access token to send on session-gated calls. */
   access_token: string;
+  /** Rotating credential for the next refresh; absent when the server doesn't rotate it. */
   refresh_token?: string;
+  /** Access-token lifetime, in seconds from issuance. */
   expires_in: number;
+  /** Server-assigned device identifier; currently unused by the client. */
   device_id?: string;
+  /** Server-assigned trust tier for the device; currently unused by the client. */
   tier?: number;
 }
 
+/** Bootstraps a session from a partner-issued session token. */
+interface SessionTokenGrant {
+  grant_type: 'session_token';
+  /** The opaque `st_` token minted by the partner's `getSessionToken` callback. */
+  session_token: string;
+  /** Device-attestation payload; `{ type: 'none' }` until an attestation provider is wired in. */
+  attestation: { type: 'none' };
+}
+
+/** Refreshes an existing session using its rotating refresh token. */
+interface RefreshTokenGrant {
+  grant_type: 'refresh_token';
+  /** The refresh token returned by the previous token exchange. */
+  refresh_token: string;
+  /** The session id the refresh token belongs to; the server resolves the session by it. */
+  session_id: string;
+}
+
+/** The two grant shapes the token endpoint accepts. */
+type TokenRequestBody = SessionTokenGrant | RefreshTokenGrant;
+
+/** Minimal shape needed to detect the `use_dpop_nonce` challenge in an OAuth error body. */
+interface DpopNonceChallengeBody {
+  error?: string;
+}
+
 interface SessionManagerDeps {
+  /** Platform adapters used for signing, storage, transport and fingerprinting. */
   adapters: Adapters;
+  /** URL builder for the token endpoint. */
   endpoints: Endpoints;
+  /** Publishable partner API key, sent on the token exchange. */
   apiKey: string;
+  /** Client channel reported on the token exchange. */
   channel: OnramperChannel;
+  /** Consumer callback that mints a fresh session token when bootstrapping. */
   getSessionToken: GetSessionToken;
 }
 
@@ -32,7 +68,7 @@ interface SessionManagerDeps {
  * exchanges at once.
  */
 export class SessionManager {
-  private key?: Es256KeyHandle;
+  private key?: ES256KeyHandle;
   private fingerprint?: string;
   private accessToken?: string;
   private accessTokenExpSec = 0;
@@ -43,6 +79,11 @@ export class SessionManager {
   private sessionId?: string;
   private inFlight?: Promise<string>;
 
+  /**
+   * Creates a session manager bound to its collaborators.
+   *
+   * @param deps - The session manager's collaborators (adapters, endpoints, credentials).
+   */
   constructor(private readonly deps: SessionManagerDeps) {}
 
   /** Clears the whole session, forcing a fresh bootstrap on next use. */
@@ -60,7 +101,7 @@ export class SessionManager {
   }
 
   /** The DPoP key handle (generated lazily). Callers need it to sign per-request proofs. */
-  async getKey(): Promise<Es256KeyHandle> {
+  async getKey(): Promise<ES256KeyHandle> {
     if (!this.key) {
       this.key = await this.deps.adapters.crypto.generateEs256KeyPair();
     }
@@ -176,11 +217,16 @@ export class SessionManager {
    * POSTs to the token endpoint with a DPoP proof bound to that endpoint. If the
    * server demands a DPoP nonce (`use_dpop_nonce`), retries once echoing it.
    *
-   * `extraHeaders` carries request-specific headers — the bootstrap exchange
-   * adds `device` (the X-Onramper-Device fingerprint); refresh sends none.
+   * @param body - The grant to request (session-token bootstrap or refresh).
+   * @param extraHeaders - Request-specific headers — the bootstrap exchange
+   *   adds `device` (the X-Onramper-Device fingerprint); refresh sends none.
+   * @param dpopNonce - The server-issued nonce to echo, when retrying after a nonce challenge.
+   * @returns The parsed token response.
+   * @throws {OnramperError} Mapped from the token endpoint's RFC 6749 error body
+   *   after the one nonce-challenge retry is exhausted.
    */
   private async tokenRequest(
-    body: Record<string, unknown>,
+    body: TokenRequestBody,
     extraHeaders: { device?: string } = {},
     dpopNonce?: string,
   ): Promise<TokenResponse> {
@@ -210,7 +256,7 @@ export class SessionManager {
     const parsed = safeJsonBody(res.body);
     const serverNonce = readDpopNonce(res.headers);
     const isNonceChallenge =
-      (parsed as { error?: string } | undefined)?.error === 'use_dpop_nonce' && serverNonce && !dpopNonce;
+      (parsed as DpopNonceChallengeBody | undefined)?.error === 'use_dpop_nonce' && serverNonce && !dpopNonce;
     if (isNonceChallenge) {
       return this.tokenRequest(body, extraHeaders, serverNonce);
     }
