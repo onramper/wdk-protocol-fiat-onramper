@@ -51,24 +51,51 @@ describe('units — base-unit ↔ decimal conversion', () => {
   });
 
   describe('toBaseUnitBigInt', () => {
-    it('passes bigints through and accepts integer numbers (including 0)', () => {
+    const expectRejected = (amount: number | bigint): void => {
+      let err: unknown;
+      try {
+        toBaseUnitBigInt(amount);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(OnramperError);
+      expect((err as OnramperError).code).toBe(OnramperErrorCode.INVALID_ARGUMENT);
+    };
+
+    it('passes bigints through and accepts safe integer numbers (including 0)', () => {
       expect(toBaseUnitBigInt(0n)).toBe(0n);
       expect(toBaseUnitBigInt(0)).toBe(0n);
       expect(toBaseUnitBigInt(10_000)).toBe(10_000n);
       expect(toBaseUnitBigInt(10_000n)).toBe(10_000n);
     });
 
+    it('accepts the largest safe integer and arbitrarily large bigints', () => {
+      expect(toBaseUnitBigInt(Number.MAX_SAFE_INTEGER)).toBe(9_007_199_254_740_991n);
+      // A whole 18-decimal token exceeds 2^53, so it can only be passed as a bigint.
+      expect(toBaseUnitBigInt(10n ** 18n)).toBe(1_000_000_000_000_000_000n);
+      expect(toBaseUnitBigInt(123_456_789_012_345_678_901_234_567_890n)).toBe(123_456_789_012_345_678_901_234_567_890n);
+    });
+
     it('rejects a non-integer / NaN / Infinity number with INVALID_ARGUMENT (not a raw RangeError)', () => {
       for (const bad of [100.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-        let err: unknown;
-        try {
-          toBaseUnitBigInt(bad);
-        } catch (e) {
-          err = e;
-        }
-        expect(err).toBeInstanceOf(OnramperError);
-        expect((err as OnramperError).code).toBe(OnramperErrorCode.INVALID_ARGUMENT);
+        expectRejected(bad);
       }
+    });
+
+    it('rejects unsafe-integer numbers instead of silently encoding the rounded double', () => {
+      // Number.isInteger accepts all of these; none is a safe integer, so each
+      // must be passed as a bigint. 2**53 and 1e18 happen to be exactly
+      // representable but are still rejected (the guard doesn't special-case
+      // which doubles are exact); Number('1234567890123456789') genuinely rounds
+      // to 1234567890123456800, which BigInt() would otherwise encode silently.
+      for (const bad of [Number.MAX_SAFE_INTEGER + 1, 2 ** 53, 1e18, Number('1234567890123456789')]) {
+        expectRejected(bad);
+      }
+    });
+
+    it('rejects negative amounts of either type', () => {
+      expectRejected(-1);
+      expectRejected(-1n);
     });
   });
 

@@ -74,23 +74,33 @@ export function sumToBaseUnits(decimalAmounts: (number | string | undefined)[], 
 
 /**
  * Coerce a WDK base/minor-unit amount (`number | bigint`) to a bigint. Amounts
- * are whole base units, so a fractional, NaN or Infinity `number` is out of
- * contract and fails with a typed OnramperError rather than a raw `RangeError`
- * from `BigInt()` (quote path) or a silently truncated widget amount (buy/sell).
+ * are whole, non-negative base units. A `number` must be a *safe* integer:
+ * `Number.isInteger` alone admits values at or above `2^53`, where adjacent
+ * integers are no longer distinctly representable as doubles, so `BigInt()` could
+ * encode a rounded value with no error — oversized amounts must be passed as a
+ * `bigint`. Out-of-contract input fails with a typed OnramperError rather than a
+ * raw `RangeError` from `BigInt()` (quote path) or a silently truncated widget
+ * amount (buy/sell).
  *
  * @param amount - The WDK base/minor-unit amount.
  * @returns `amount` as a bigint.
- * @throws {OnramperError} `INVALID_ARGUMENT` for a non-integer number.
+ * @throws {OnramperError} `INVALID_ARGUMENT` for a `number` that is not a safe
+ *   integer (fractional, NaN, Infinity, or magnitude above
+ *   `Number.MAX_SAFE_INTEGER`), or for a negative amount of either type.
  */
 export function toBaseUnitBigInt(amount: number | bigint): bigint {
-  if (typeof amount === 'bigint') {
-    return amount;
-  }
-  if (!Number.isInteger(amount)) {
+  if (typeof amount === 'number' && !Number.isSafeInteger(amount)) {
     throw new OnramperError(
       OnramperErrorCode.INVALID_ARGUMENT,
-      `Amount must be a whole number of base/minor units; received ${amount}`,
+      `Amount must be a safe-integer number of base/minor units (pass a bigint above Number.MAX_SAFE_INTEGER); received ${amount}`,
     );
   }
-  return BigInt(amount);
+  const value = BigInt(amount);
+  if (value < 0n) {
+    throw new OnramperError(
+      OnramperErrorCode.INVALID_ARGUMENT,
+      `Amount must be a non-negative number of base/minor units; received ${amount}`,
+    );
+  }
+  return value;
 }

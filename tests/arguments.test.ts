@@ -43,10 +43,10 @@ describe('amount-XOR / argument validation (INVALID_ARGUMENT)', () => {
 
   it('rejects a non-integer number amount with a typed error (not a raw RangeError)', async () => {
     await expect(proto().quoteBuy({ ...base, fiatAmount: 100.5 })).rejects.toMatchObject(
-      reject(OnramperErrorCode.INVALID_ARGUMENT, /whole number/),
+      reject(OnramperErrorCode.INVALID_ARGUMENT, /base\/minor units/),
     );
     await expect(proto().buy({ ...base, fiatAmount: 100.5, recipient: '0xabc' })).rejects.toMatchObject(
-      reject(OnramperErrorCode.INVALID_ARGUMENT, /whole number/),
+      reject(OnramperErrorCode.INVALID_ARGUMENT, /base\/minor units/),
     );
   });
 
