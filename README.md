@@ -86,5 +86,8 @@ Shapes follow `@tetherto/wdk-wallet/protocols` exactly:
 ### Platform adapters
 
 Crypto / storage / HTTP / fingerprint are pluggable (`config.adapters`). Defaults:
-WebCrypto (web · Node · Bare), in-memory token storage (secure default — inject
-your own to persist), global `fetch`.
+WebCrypto on web and Node (the DPoP private key is non-extractable); a pure-JS
+P-256 adapter on Bare, whose `crypto.subtle` has no ECDSA (its key is an
+in-process scalar — acceptable under Bare's no-DOM threat model, or inject your
+own). In-memory token storage (secure default — inject your own to persist),
+global `fetch`.
