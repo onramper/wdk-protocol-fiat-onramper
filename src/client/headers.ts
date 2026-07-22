@@ -1,8 +1,11 @@
 import type { OnramperChannel } from '../types/onramper.ts';
 import { randomId } from '../utils/format.ts';
 
-/** Version reported in `X-Onramper-SDK-Version`. Server regex expects `<platform>-<semver>`. */
-export const SDK_VERSION = '0.1.0';
+/**
+ * Version reported in `X-Onramper-SDK-Version` (server expects `<platform>-<semver>`).
+ * Must equal `package.json` version — a unit test asserts it so the two can't drift.
+ */
+export const SDK_VERSION = '0.2.0';
 
 /** Inputs to a single session-gated request's security envelope. */
 export interface EnvelopeInput {
