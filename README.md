@@ -1,5 +1,12 @@
 # @onramper/wdk-protocol-fiat-onramper
 
+<a href="https://github.com/tetherto/wdk-wallet">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/built-with-wdk-dark.svg" />
+    <img alt="Built with WDK" src="assets/built-with-wdk-light.svg" height="32" />
+  </picture>
+</a>
+
 Onramper's implementation of Tether's WDK fiat protocol. `OnramperFiatProtocol`
 extends [`FiatProtocol`](https://github.com/tetherto/wdk-wallet/blob/main/src/protocols/fiat-protocol.js)
 from [`@tetherto/wdk-wallet`](https://github.com/tetherto/wdk-wallet), so a WDK
