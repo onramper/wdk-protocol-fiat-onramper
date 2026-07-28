@@ -40,6 +40,43 @@ describe('decode errors — a 2xx body that is not JSON surfaces DECODE_ERROR, n
       new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
     ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /Failed to decode response body/));
   });
+
+  it('token exchange returning 200 {} surfaces DECODE_ERROR, not a Bearer undefined session', async () => {
+    const http = mockHttp([{ match: 'client-sessions/tokens', handler: () => json(200, {}) }, txOk]);
+    await expect(
+      new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /access_token/));
+  });
+
+  it('token exchange with a non-numeric expires_in surfaces DECODE_ERROR', async () => {
+    const http = mockHttp([
+      { match: 'client-sessions/tokens', handler: () => json(200, { access_token: 'at', expires_in: 'soon' }) },
+      txOk,
+    ]);
+    await expect(
+      new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /expires_in/));
+  });
+
+  it('token exchange returning 200 null surfaces DECODE_ERROR, not a native TypeError', async () => {
+    const http = mockHttp([{ match: 'client-sessions/tokens', handler: () => raw(200, 'null') }, txOk]);
+    await expect(
+      new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /JSON object/));
+  });
+
+  it('token exchange with a non-string refresh_token surfaces DECODE_ERROR', async () => {
+    const http = mockHttp([
+      {
+        match: 'client-sessions/tokens',
+        handler: () => json(200, { access_token: 'at', expires_in: 900, refresh_token: 123 }),
+      },
+      txOk,
+    ]);
+    await expect(
+      new OnramperFiatProtocol(undefined, baseConfig({ adapters: http.adapters() })).getTransactionDetail('s'),
+    ).rejects.toMatchObject(reject(OnramperErrorCode.DECODE_ERROR, /refresh_token/));
+  });
 });
 
 describe('HTTP error mapping — every failure surfaces a typed OnramperError', () => {

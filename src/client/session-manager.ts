@@ -48,6 +48,41 @@ interface DpopNonceChallengeBody {
   error?: string;
 }
 
+/**
+ * Parse and validate a 2xx token-endpoint body before it is trusted. A malformed
+ * success (e.g. `200 {}`) would otherwise be stored verbatim and sent as
+ * `Bearer undefined` with a `NaN` expiry on every session-gated call.
+ *
+ * @param body - The raw 2xx response body.
+ * @returns The validated token response.
+ * @throws {OnramperError} `DECODE_ERROR` when the body is not a JSON object or
+ *   `access_token` / `expires_in` / `refresh_token` is missing or malformed.
+ */
+function parseTokenResponse(body: string): TokenResponse {
+  const parsed = parseJsonBody<Partial<TokenResponse>>(body);
+  if (parsed === null || typeof parsed !== 'object') {
+    throw new OnramperError(OnramperErrorCode.DECODE_ERROR, 'Token response is not a JSON object');
+  }
+  // Non-empty and whitespace-free: the token is interpolated into an
+  // Authorization header, so a value with CR/LF or spaces (header-framing risk)
+  // is rejected, not just an empty one.
+  if (typeof parsed.access_token !== 'string' || parsed.access_token.length === 0 || /\s/.test(parsed.access_token)) {
+    throw new OnramperError(OnramperErrorCode.DECODE_ERROR, 'Token response has no valid access_token');
+  }
+  // A finite number is the well-formedness bar (guards the NaN expiry that an
+  // absent/non-numeric value produces). A non-positive lifetime is left to the
+  // expiry logic — it just means "expired now", which safely triggers a refresh.
+  if (typeof parsed.expires_in !== 'number' || !Number.isFinite(parsed.expires_in)) {
+    throw new OnramperError(OnramperErrorCode.DECODE_ERROR, 'Token response has no valid expires_in');
+  }
+  // A non-string refresh_token would be stored and serialized into the next
+  // refresh request, poisoning session state; reject it here.
+  if (parsed.refresh_token !== undefined && typeof parsed.refresh_token !== 'string') {
+    throw new OnramperError(OnramperErrorCode.DECODE_ERROR, 'Token response has a malformed refresh_token');
+  }
+  return parsed as TokenResponse;
+}
+
 interface SessionManagerDeps {
   /** Platform adapters used for signing, storage, transport and fingerprinting. */
   adapters: Adapters;
@@ -250,7 +285,7 @@ export class SessionManager {
     });
 
     if (res.status >= 200 && res.status < 300) {
-      return parseJsonBody<TokenResponse>(res.body);
+      return parseTokenResponse(res.body);
     }
 
     const parsed = safeJsonBody(res.body);
