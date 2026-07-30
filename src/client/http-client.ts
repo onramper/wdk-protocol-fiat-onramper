@@ -1,0 +1,118 @@
+import type { Adapters } from '../adapters/types.ts';
+import { mapCheckoutError, OnramperErrorCode } from '../errors.ts';
+import type { OnramperChannel } from '../types/onramper.ts';
+import { parseJsonBody, safeJsonBody } from '../utils/format.ts';
+import { buildDpopProof } from './dpop.ts';
+import { buildEnvelopeHeaders, newNonce, readDpopNonce } from './headers.ts';
+import type { SessionManager } from './session-manager.ts';
+
+interface AuthorizedClientDeps {
+  /** Platform adapters used for signing and transport. */
+  adapters: Adapters;
+  /** Owns access-token bootstrap/refresh and the DPoP key. */
+  session: SessionManager;
+  /** Publishable partner API key. */
+  apiKey: string;
+  /** Client channel reported on session-gated calls. */
+  channel: OnramperChannel;
+}
+
+/**
+ * Issues authenticated GET calls in two flavors:
+ *   - `getWithApiKey`: the publishable apiKey alone, for the public data
+ *     endpoints (supported, quotes).
+ *   - `getWithSession`: the full SDK session envelope (access token + DPoP),
+ *     for the checkout session API. Recovers once from an expired session (401 →
+ *     invalidate + refresh) and once from a DPoP nonce challenge, then gives up.
+ */
+export class AuthorizedClient {
+  /**
+   * Creates a client bound to its collaborators.
+   *
+   * @param deps - The client's collaborators (adapters, session manager, credentials).
+   */
+  constructor(private readonly deps: AuthorizedClientDeps) {}
+
+  /**
+   * Issues a GET authenticated by the publishable apiKey alone, for the public
+   * data endpoints (supported, quotes).
+   *
+   * @param url - The endpoint URL to GET.
+   * @returns The parsed JSON response body.
+   * @throws {OnramperError} Mapped from the non-2xx response (see `OnramperErrorCode`).
+   */
+  async getWithApiKey<T>(url: string): Promise<T> {
+    const res = await this.deps.adapters.http.request({
+      method: 'GET',
+      url,
+      headers: { Authorization: this.deps.apiKey },
+    });
+    if (res.status >= 200 && res.status < 300) {
+      return parseJsonBody<T>(res.body);
+    }
+    throw mapCheckoutError(res.status, safeJsonBody(res.body));
+  }
+
+  /**
+   * Issues a GET authenticated by the full SDK session envelope (access token +
+   * DPoP), for the checkout session API. Recovers once from an expired session
+   * (401 → invalidate + refresh) and once from a DPoP nonce challenge, then
+   * gives up.
+   *
+   * @param url - The endpoint URL to GET.
+   * @returns The parsed JSON response body.
+   * @throws {OnramperError} Mapped from the non-2xx response (see
+   *   `OnramperErrorCode`) after the session-refresh and DPoP-nonce retries are
+   *   exhausted.
+   */
+  async getWithSession<T>(url: string): Promise<T> {
+    let allowSessionRetry = true;
+    let dpopNonce: string | undefined;
+
+    for (;;) {
+      const accessToken = await this.deps.session.getAccessToken();
+      const [key, fingerprint] = await Promise.all([this.deps.session.getKey(), this.deps.session.getFingerprint()]);
+      const dpopProof = await buildDpopProof(this.deps.adapters.crypto, key, {
+        method: 'GET',
+        url,
+        accessToken,
+        nonce: dpopNonce,
+      });
+
+      const res = await this.deps.adapters.http.request({
+        method: 'GET',
+        url,
+        headers: buildEnvelopeHeaders({
+          apiKey: this.deps.apiKey,
+          channel: this.deps.channel,
+          accessToken,
+          dpopProof,
+          deviceFingerprint: fingerprint,
+          nonce: newNonce(),
+        }),
+      });
+
+      if (res.status >= 200 && res.status < 300) {
+        return parseJsonBody<T>(res.body);
+      }
+
+      const parsed = safeJsonBody(res.body);
+
+      // DPoP nonce challenge: retry once echoing the server-provided nonce.
+      const serverNonce = readDpopNonce(res.headers);
+      if (serverNonce && !dpopNonce) {
+        dpopNonce = serverNonce;
+        continue;
+      }
+
+      // Stale session: refresh once, then retry the call.
+      const error = mapCheckoutError(res.status, parsed);
+      if (res.status === 401 && allowSessionRetry && error.code === OnramperErrorCode.INVALID_SDK_SESSION) {
+        allowSessionRetry = false;
+        this.deps.session.invalidateAccessToken();
+        continue;
+      }
+      throw error;
+    }
+  }
+}
