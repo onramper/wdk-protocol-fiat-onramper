@@ -98,3 +98,37 @@ P-256 adapter on Bare, whose `crypto.subtle` has no ECDSA (its key is an
 in-process scalar — acceptable under Bare's no-DOM threat model, or inject your
 own). In-memory token storage (secure default — inject your own to persist),
 global `fetch`.
+
+## Trust model & integration
+
+The SDK runs in your wallet client, but anything that can move money or sign on
+your behalf stays on your backend. That split is the security model, so here's
+what goes where.
+
+- **`apiKey`** — the publishable `pk_` key, safe in client code. It identifies
+  your integration on the public quote and supported-list calls and tells your
+  own backend which signing credential to use. On its own it can't sign a URL or
+  open a session.
+- **`signUrl`** — the SDK hands your callback the widget params and expects a
+  signed URL back. Your server signs with your Onramper signing key, which never
+  reaches the client. Same signing you already do for the hosted widget.
+- **`getSessionToken`** — only `getTransactionDetail` needs it. Your backend
+  mints a session token through your Onramper integration and returns
+  `{ sessionId, sessionToken }`. It's short-lived and single-use: the SDK spends
+  it on the first exchange, so return a fresh one each call. The SDK trades it
+  for a session credential bound to a device-held key (DPoP), refreshes that
+  itself, scopes it to just the session-gated call, and keeps it in memory by
+  default.
+
+### Backend you run
+
+Two endpoints, both holding your partner credentials: one to sign widget URLs,
+one to mint session tokens. Quotes, supported lists, and `buy` / `sell` never
+hit the session endpoint; it's there only for `getTransactionDetail`.
+
+### Onramper-side setup
+
+Your partner account is provisioned for the WDK channel first: a publishable
+key, a registered signing key, and the session settings that let the SDK open a
+session within the scope and lifetime Onramper allows. Your Onramper contact
+sets this up; the partner docs cover the current steps.
