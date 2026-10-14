@@ -4,6 +4,8 @@ on:
   release:
     types: [published]
 
+# id-token: write lets npm authenticate via trusted publishing (OIDC) and
+# mint the Sigstore identity for provenance — no npm token is used.
 permissions:
   contents: read
   id-token: write
@@ -16,9 +18,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      # `npm stage publish` over trusted publishing needs npm >= 11.15.0.
+      # Pinned exactly: this job can mint an OIDC publish token.
+      - name: Upgrade npm
+        run: npm install -g npm@11.21.0
 
       - run: npm ci
 
@@ -32,7 +39,19 @@ jobs:
           fi
           echo "version $PKG matches tag $TAG"
 
-      - name: Publish to npm
-        run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # The version is staged, not live: a maintainer must approve it with 2FA
+      # on npmjs.com (Staged Packages tab) or via `npm stage approve <stage-id>`.
+      # The dist-tag is fixed at staging time and cannot be changed on approval.
+      - name: Stage npm publish
+        run: |
+          set -o pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          npm stage publish 2>&1 | tee stage-publish.log
+          STAGE_ID=$(grep -oE 'staged with id [0-9a-fA-F-]+' stage-publish.log | awk '{print $4}' || true)
+          {
+            echo "### npm v${VERSION} staged"
+            echo
+            echo "Not live until a maintainer approves it with 2FA:"
+            echo "- npmjs.com → @onramper/wdk-protocol-fiat-onramper → Staged Packages → Approve"
+            echo "- or locally: \`npm stage approve ${STAGE_ID:-<stage-id>}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
